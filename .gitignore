@@ -4,6 +4,7 @@
 .pydevproject
 revision.h
 *.swp
+*.*~
 .DS_Store
 make_translation
 merge_translations
