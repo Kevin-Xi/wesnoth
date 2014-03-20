@@ -24,6 +24,7 @@
 #include "composite/engine_lua.hpp"
 #include "composite/goal.hpp"
 #include "default/ai.hpp"
+#include "kevin/ai.hpp"
 #include "formula/ai.hpp"
 #include "registry.hpp"
 #include "testing/aspect_attacks.hpp"
@@ -44,6 +45,7 @@ namespace ai {
 
 static register_ai_factory<ai_composite> ai_factory_default("");
 static register_ai_factory<ai_composite> ai_default_ai_factory("default_ai");
+static register_ai_factory<ai_composite> ai_kevin_ai_factory("kevin_ai");
 static register_ai_factory<idle_ai> ai_idle_ai_factory("idle_ai");
 static register_ai_factory<ai_composite> ai_composite_ai_factory("composite_ai");
 
