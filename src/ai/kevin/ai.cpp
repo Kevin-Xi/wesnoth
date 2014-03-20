@@ -1,6 +1,7 @@
 /*
  * kevin_ai
  * A toy AI of wesnoth, use for test and familiar
+ * Strategy: find the best location to attack enemy nearby
  */
 
 #include "ai.hpp"
