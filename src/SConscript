@@ -195,6 +195,7 @@ wesnoth_sources = Split("""
     ai/default/attack.cpp
     ai/default/contexts.cpp
     ai/kevin/ai.cpp
+    ai/kevin/attack_spearman.cpp
     ai/formula/ai.cpp
     ai/formula/callable_objects.cpp
     ai/formula/candidates.cpp

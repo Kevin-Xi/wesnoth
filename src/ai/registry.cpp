@@ -35,6 +35,7 @@
 #include "testing/stage_rca.hpp"
 #include "testing/stage_fallback.hpp"
 #include "akihara/recruitment.hpp"
+#include "kevin/attack_spearman.hpp"
 #include "lua/unit_advancements_aspect.hpp"
 #include "recruitment/recruitment.hpp"
 
@@ -138,6 +139,10 @@ static register_candidate_action_factory<testing_ai_default::global_fallback_pha
 
 static register_candidate_action_factory<akihara_recruitment::recruitment>
 	recruitment_factory("akihara_recruitment::recruitment");
+
+// Add kevin's CA
+static register_candidate_action_factory<kevin_ai_pieces::attack_spearman>
+	attack_spearman_factory("kevin_ai_pieces::attack_spearman");
 
 static register_candidate_action_factory<default_recruitment::recruitment>
 	default_recruitment_factory("default_recruitment::recruitment");
