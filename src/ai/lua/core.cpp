@@ -24,6 +24,7 @@
 
 #include <cassert>
 #include <cstring>
+#include <cmath>    // (Kevin)
 
 #include "core.hpp"
 #include "../../scripting/lua.hpp"
@@ -840,6 +841,30 @@ static int cfun_ai_recalculate_move_maps_enemy(lua_State *L)
 	return 1;
 }
 
+static int cfun_ai_kevin_analyze(lua_State *L)
+{
+    int side = get_readonly_context(L).get_side();
+    gamemap &map_ = *resources::game_map;
+    const std::vector<map_location>& villages = map_.villages();
+    const int total_village_number = villages.size();
+    int own_village_number = 0;
+    for(std::vector<map_location>::const_iterator v = villages.begin(); v != villages.end(); v++){
+        const int owner = village_owner(*v);
+        if(side == owner){
+            ++own_village_number;
+        }
+        std::cout<<*v<<'\t'<<side<<'\t'<<village_owner(*v)<<'\t'<<std::endl;
+    }
+
+    const int tod_modifier = 2;//;
+    const int total_turns = (map_.w()>map_.h() ? map_.w() : map_.h())/2;
+    int turns_remain = total_turns - 2;//get_turns();
+
+    double village_priority = (2*(total_village_number-own_village_number)*2/*village_gold()*/*turns_remain)/(1+exp(own_village_number+total_village_number/2+tod_modifier));
+    lua_pushnumber(L, village_priority);
+	return 1;
+}
+
 static void generate_and_push_ai_table(lua_State* L, ai::engine_lua* engine) {
 	//push data table here
 	lua_newtable(L);
@@ -902,6 +927,9 @@ static void generate_and_push_ai_table(lua_State* L, ai::engine_lua* engine) {
 			{ "check_synced_command", &cfun_ai_check_synced_command },
 			{ "check_attack", &cfun_ai_check_attack },
 			{ "check_recruit", &cfun_ai_check_recruit },
+            // kevin analyze
+			{ "kevin_analyze", &cfun_ai_kevin_analyze },
+            // End of kevin analyze
 			//{ "",},
 			//{ "",},
 			{ NULL, NULL } };
