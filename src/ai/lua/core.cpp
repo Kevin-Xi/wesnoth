@@ -855,6 +855,7 @@ static int cfun_ai_kevin_analyze(lua_State *L)
         }
         std::cout<<*v<<'\t'<<side<<'\t'<<village_owner(*v)<<'\t'<<std::endl;
     }
+http://devdocs.wesnoth.org/contexts_8cpp_source.html#1139
 
     const int tod_modifier = 2;//;
     const int total_turns = (map_.w()>map_.h() ? map_.w() : map_.h())/2;
