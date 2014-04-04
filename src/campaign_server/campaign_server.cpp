@@ -25,6 +25,7 @@
 #include "serialization/binary_or_text.hpp"
 #include "serialization/parser.hpp"
 #include "serialization/string_utils.hpp"
+#include "serialization/unicode.hpp"
 #include "game_config.hpp"
 #include "addon/validation.hpp"
 #include "version.hpp"
@@ -489,7 +490,7 @@ namespace {
 						std::transform(name.begin(), name.end(), lc_name.begin(), tolower);
 						config *campaign = NULL;
 						BOOST_FOREACH(config &c, campaigns().child_range("campaign")) {
-							if (utils::lowercase(c["name"]) == lc_name) {
+							if (utf8::lowercase(c["name"]) == lc_name) {
 								campaign = &c;
 								break;
 							}

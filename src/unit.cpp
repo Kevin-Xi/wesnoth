@@ -33,6 +33,7 @@
 #include "unit_abilities.hpp"
 #include "terrain_filter.hpp"
 #include "formula_string_utils.hpp"
+#include "random_new.hpp"
 #include "scripting/lua.hpp"
 #include "side_filter.hpp"
 #include "play_controller.hpp"
@@ -85,7 +86,7 @@ static const unit_type &get_unit_type(const std::string &type_id)
 	return *i;
 }
 
-static unit_race::GENDER generate_gender(const unit_type & type, bool random_gender, rand_rng::simple_rng* rng)
+static unit_race::GENDER generate_gender(const unit_type & type, bool random_gender)
 {
 	const std::vector<unit_race::GENDER>& genders = type.genders();
 	assert( genders.size() > 0 );
@@ -93,7 +94,7 @@ static unit_race::GENDER generate_gender(const unit_type & type, bool random_gen
 	if ( random_gender == false  ||  genders.size() == 1 ) {
 		return genders.front();
 	} else {
-		int random = rng ? rng->get_next_random() : get_random_nocheck();
+		int random = random_new::generator->next_random();
 		return genders[random % genders.size()];
 		// Note: genders is guaranteed to be non-empty, so this is not a
 		// potential division by zero.
@@ -103,13 +104,13 @@ static unit_race::GENDER generate_gender(const unit_type & type, bool random_gen
 	}
 }
 
-static unit_race::GENDER generate_gender(const unit_type & u_type, const config &cfg, rand_rng::simple_rng* rng)
+static unit_race::GENDER generate_gender(const unit_type & u_type, const config &cfg)
 {
 	const std::string& gender = cfg["gender"];
 	if(!gender.empty())
 		return string_gender(gender);
 
-	return generate_gender(u_type, cfg["random_gender"].to_bool(), rng);
+	return generate_gender(u_type, cfg["random_gender"].to_bool());
 }
 
 const std::string& unit::leader_crown()
@@ -136,6 +137,7 @@ unit::unit(const unit& o):
            experience_(o.experience_),
            max_experience_(o.max_experience_),
            level_(o.level_),
+           recall_cost_(o.recall_cost_),
            canrecruit_(o.canrecruit_),
            recruit_list_(o.recruit_list_),
            alignment_(o.alignment_),
@@ -224,6 +226,7 @@ unit::unit(const config &cfg, bool use_traits, const vconfig* vcfg) :
 	experience_(0),
 	max_experience_(0),
 	level_(0),
+	recall_cost_(-1),
 	canrecruit_(cfg["canrecruit"].to_bool()),
 	recruit_list_(),
 	alignment_(),
@@ -231,7 +234,7 @@ unit::unit(const config &cfg, bool use_traits, const vconfig* vcfg) :
 	image_mods_(),
 	unrenamable_(false),
 	side_(0),
-	gender_(generate_gender(*type_, cfg, &resources::gamedata->rng())),
+	gender_(generate_gender(*type_, cfg)),
 	alpha_(),
 	unit_formula_(),
 	unit_loop_formula_(),
@@ -462,6 +465,12 @@ unit::unit(const config &cfg, bool use_traits, const vconfig* vcfg) :
 	resting_ = cfg["resting"].to_bool();
 	unrenamable_ = cfg["unrenamable"].to_bool();
 
+	/* We need to check to make sure that the cfg is not blank and if it
+	isn't pull that value otherwise it goes with the default of -1.  */
+	if(!cfg["recall_cost"].blank()) {
+		recall_cost_ = cfg["recall_cost"].to_int(recall_cost_);
+	}
+
 	const std::string& align = cfg["alignment"];
 	if(align == "lawful") {
 		alignment_ = unit_type::LAWFUL;
@@ -471,11 +480,11 @@ unit::unit(const config &cfg, bool use_traits, const vconfig* vcfg) :
 		alignment_ = unit_type::CHAOTIC;
 	} else if(align == "liminal") {
 		alignment_ = unit_type::LIMINAL;
-	} else if(align.empty()==false){
+	} else if(align.empty()==false) {
 		alignment_ = unit_type::NEUTRAL;
 	}
 
-	generate_name(resources::gamedata ? &(resources::gamedata->rng()) : 0);
+	generate_name();
 
 	// Make the default upkeep "full"
 	if(cfg_["upkeep"].empty()) {
@@ -492,7 +501,7 @@ unit::unit(const config &cfg, bool use_traits, const vconfig* vcfg) :
 	static char const *internalized_attrs[] = { "type", "id", "name",
 		"gender", "random_gender", "variation", "role", "ai_special",
 		"side", "underlying_id", "overlays", "facing", "race",
-		"level", "undead_variation", "max_attacks",
+		"level", "recall_cost", "undead_variation", "max_attacks",
 		"attacks_left", "alpha", "zoc", "flying", "cost",
 		"max_hitpoints", "max_moves", "vision", "jamming", "max_experience",
 		"advances_to", "hitpoints", "goto_x", "goto_y", "moves",
@@ -552,6 +561,7 @@ unit::unit(const unit_type &u_type, int side, bool real_unit,
 	experience_(0),
 	max_experience_(0),
 	level_(0),
+	recall_cost_(-1),
 	canrecruit_(false),
 	recruit_list_(),
 	alignment_(),
@@ -560,11 +570,11 @@ unit::unit(const unit_type &u_type, int side, bool real_unit,
 	unrenamable_(false),
 	side_(side),
 	gender_(gender != unit_race::NUM_GENDERS ?
-		gender : generate_gender(u_type, real_unit, resources::gamedata ? &(resources::gamedata->rng()) : NULL)),
+		gender : generate_gender(u_type, real_unit)),
 	alpha_(),
 	unit_formula_(),
 	unit_loop_formula_(),
-    unit_priority_formula_(),
+	unit_priority_formula_(),
 	formula_vars_(),
 	movement_(0),
 	max_movement_(0),
@@ -613,7 +623,7 @@ unit::unit(const unit_type &u_type, int side, bool real_unit,
 	advance_to(u_type, real_unit);
 
 	if(real_unit) {
-		generate_name(resources::gamedata ? &(resources::gamedata->rng()) : NULL);
+		generate_name();
 	}
 	set_underlying_id();
 
@@ -660,11 +670,11 @@ unit& unit::operator=(const unit& u)
 }
 
 
-void unit::generate_name(rand_rng::simple_rng* rng)
+void unit::generate_name()
 {
 	if (!name_.empty() || !cfg_["generate_name"].to_bool(true)) return;
 
-	name_ = race_->generate_name(gender_, rng);
+	name_ = race_->generate_name(gender_);
 	cfg_["generate_name"] = false;
 }
 
@@ -728,8 +738,7 @@ void unit::generate_traits(bool musthaveonly)
 	int max_traits = u_type.num_traits();
 	for (; nb_traits < max_traits && !candidate_traits.empty(); ++nb_traits)
 	{
-		int num = (resources::gamedata ? resources::gamedata->rng().get_next_random() : get_random_nocheck())
-		          % candidate_traits.size();
+		int num = random_new::generator->next_random() % candidate_traits.size();
 		modifications_.add_child("trait", candidate_traits[num]);
 		candidate_traits.erase(candidate_traits.begin() + num);
 	}
@@ -817,6 +826,13 @@ void unit::advance_to(const config &old_cfg, const unit_type &u_type,
 	undead_variation_ = new_type.undead_variation();
 	max_experience_ = new_type.experience_needed(false);
 	level_ = new_type.level();
+	recall_cost_ = new_type.recall_cost();
+	/* Need to add a check to see if the unit's old cost is equal 
+	to the unit's old unit_type cost first.  If it is change the cost
+	otherwise keep the old cost. */
+	if(old_type.recall_cost() == recall_cost_) {
+		recall_cost_ = new_type.recall_cost();
+	}
 	alignment_ = new_type.alignment();
 	alpha_ = new_type.alpha();
 	max_hit_points_ = new_type.hitpoints();
@@ -1511,7 +1527,12 @@ bool unit::internal_matches_filter(const vconfig& cfg, const map_location& loc, 
 	if (!cfg_canrecruit.blank() && cfg_canrecruit.to_bool() != can_recruit()) {
 		return false;
 	}
-
+	
+	config::attribute_value cfg_recall_cost = cfg["recall_cost"];
+	if (!cfg_recall_cost.blank() && cfg_recall_cost.to_int(-1) != recall_cost_) {
+		return false;
+	}
+	
 	config::attribute_value cfg_level = cfg["level"];
 	if (!cfg_level.blank() && cfg_level.to_int(-1) != level_) {
 		return false;
@@ -1663,7 +1684,8 @@ void unit::write(config& cfg) const
 
 	cfg["experience"] = experience_;
 	cfg["max_experience"] = max_experience_;
-
+	cfg["recall_cost"] = recall_cost_;
+	
 	cfg["side"] = side_;
 
 	cfg["type"] = type_id();
@@ -3228,6 +3250,7 @@ std::string get_checksum(const unit& u) {
 		"ignore_race_traits",
 		"ignore_global_traits",
 		"level",
+		"recall_cost",
 		"max_attacks",
 		"max_experience",
 		"max_hitpoints",

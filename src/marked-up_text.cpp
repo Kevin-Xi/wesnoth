@@ -261,7 +261,7 @@ bool is_format_char(char c)
 	}
 }
 
-bool is_cjk_char(const wchar_t c)
+bool is_cjk_char(const ucs4::char_t ch)
 {
 	/**
 	 * You can check these range at http://unicode.org/charts/
@@ -269,9 +269,6 @@ bool is_cjk_char(const wchar_t c)
 	 * Notice that not all characters in that part is still in use today, so don't list them all here.
 	 * Below are characters that I guess may be used in wesnoth translations.
 	 */
-
-	// cast to silence a windows warning (uses only 16bit for wchar_t)
-	const unsigned int ch = static_cast<unsigned int>(c);
 
 	//FIXME add range from Japanese-specific and Korean-specific section if you know the characters are used today.
 
@@ -321,10 +318,10 @@ bool is_cjk_char(const wchar_t c)
 static void cut_word(std::string& line, std::string& word, int font_size, int style, int max_width)
 {
 	std::string tmp = line;
-	utils::utf8_iterator tc(word);
+	utf8::iterator tc(word);
 	bool first = true;
 
-	for(;tc != utils::utf8_iterator::end(word); ++tc) {
+	for(;tc != utf8::iterator::end(word); ++tc) {
 		tmp.append(tc.substr().first, tc.substr().second);
 		SDL_Rect tsize = line_size(tmp, font_size, style);
 		if(tsize.w > max_width) {
@@ -359,7 +356,7 @@ namespace {
  *   CJK 标点符号 (CJK punctuations)
  *   http://www.unicode.org/charts/PDF/U3000.pdf
  */
-inline bool no_break_after(const wchar_t ch)
+inline bool no_break_after(const ucs4::char_t ch)
 {
 	return
 		/**
@@ -380,7 +377,7 @@ inline bool no_break_after(const wchar_t ch)
 		ch == 0x3016 || ch == 0x301a || ch == 0x301d;
 }
 
-inline bool no_break_before(const wchar_t ch)
+inline bool no_break_before(const ucs4::char_t ch)
 {
 	return
 		/**
@@ -417,7 +414,7 @@ inline bool no_break_before(const wchar_t ch)
 		ch == 0x301b || ch == 0x301e;
 }
 
-inline bool break_before(const wchar_t ch)
+inline bool break_before(const ucs4::char_t ch)
 {
 	if(no_break_before(ch))
 		return false;
@@ -425,7 +422,7 @@ inline bool break_before(const wchar_t ch)
 	return is_cjk_char(ch);
 }
 
-inline bool break_after(const wchar_t ch)
+inline bool break_after(const ucs4::char_t ch)
 {
 	if(no_break_after(ch))
 		return false;
@@ -440,7 +437,7 @@ std::string word_wrap_text(const std::string& unwrapped_text, int font_size,
 {
 	VALIDATE(max_width > 0, _("The maximum text width is less than 1."));
 
-	utils::utf8_iterator ch(unwrapped_text);
+	utf8::iterator ch(unwrapped_text);
 	std::string current_word;
 	std::string current_line;
 	size_t line_width = 0;
@@ -453,13 +450,13 @@ std::string word_wrap_text(const std::string& unwrapped_text, int font_size,
 	SDL_Color color;
 	int font_sz = font_size;
 	int style = TTF_STYLE_NORMAL;
-	utils::utf8_iterator end = utils::utf8_iterator::end(unwrapped_text);
+	utf8::iterator end = utf8::iterator::end(unwrapped_text);
 
 	while(1) {
 		if(start_of_line) {
 			line_width = 0;
 			format_string.clear();
-			while(ch != end && *ch < static_cast<wchar_t>(0x100)
+			while(ch != end && *ch < static_cast<ucs4::char_t>(0x100)
 					&& is_format_char(*ch) && !ch.next_is_end()) {
 
 				format_string.append(ch.substr().first, ch.substr().second);
@@ -482,8 +479,8 @@ std::string word_wrap_text(const std::string& unwrapped_text, int font_size,
 				current_word = *ch;
 				++ch;
 			} else {
-				wchar_t previous = 0;
-				for(;ch != utils::utf8_iterator::end(unwrapped_text) &&
+				ucs4::char_t previous = 0;
+				for(;ch != utf8::iterator::end(unwrapped_text) &&
 						*ch != ' ' && *ch != '\n'; ++ch) {
 
 					if(!current_word.empty() &&

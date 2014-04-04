@@ -271,8 +271,14 @@ static LEVEL_RESULT playsingle_scenario(const config& game_config,
 
 	LEVEL_RESULT res = playcontroller.play_scenario(story, skip_replay);
 	end_level = playcontroller.get_end_level_data_const();
-	config& cfg_end_level = state_of_game.carryover_sides.child("end_level_data");
-	end_level.write(cfg_end_level);
+
+	if (state_of_game.carryover_sides.has_child("end_level_data")) {
+		config& cfg_end_level = state_of_game.carryover_sides.child("end_level_data");
+		end_level.write(cfg_end_level);
+	} else {
+		config& cfg_end_level = state_of_game.carryover_sides.add_child("end_level_data");
+		end_level.write(cfg_end_level);
+	}
 
 	if (res == DEFEAT) {
 		if (resources::persist != NULL)
@@ -319,8 +325,13 @@ static LEVEL_RESULT playmp_scenario(const config& game_config,
 	LEVEL_RESULT res = playcontroller.play_scenario(story, skip_replay);
 	end_level = playcontroller.get_end_level_data_const();
 
-	config& cfg_end_level = state_of_game.carryover_sides.child("end_level_data");
-	end_level.write(cfg_end_level);
+	if (state_of_game.carryover_sides.has_child("end_level_data")) {
+		config& cfg_end_level = state_of_game.carryover_sides.child("end_level_data");
+		end_level.write(cfg_end_level);
+	} else {
+		config& cfg_end_level = state_of_game.carryover_sides.add_child("end_level_data");
+		end_level.write(cfg_end_level);
+	}
 
 	//Check if the player started as mp client and changed to host
 	if (io_type == IO_CLIENT && playcontroller.is_host())
@@ -428,19 +439,11 @@ LEVEL_RESULT play_game(game_display& disp, game_state& gamestate,
 
 	while(scenario != NULL) {
 		// If we are a multiplayer client, tweak the controllers
+		// (actually, moved to server. do we still need this starting_pos thing?)
 		if(io_type == IO_CLIENT) {
 			if(scenario != &starting_pos) {
 				starting_pos = *scenario;
 				scenario = &starting_pos;
-			}
-
-			BOOST_FOREACH(config &side, starting_pos.child_range("side"))
-			{
-				if (side["current_player"] == preferences::login()) {
-					side["controller"] = "human";
-				} else if (side["controller"] != "null") {
-					side["controller"] = "network";
-				}
 			}
 		}
 

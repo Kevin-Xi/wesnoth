@@ -68,6 +68,7 @@ public:
 	void report_victory(std::ostringstream &report, int player_gold,
 			int remaining_gold, int finishing_bonus_per_turn,
 			int turns_left, int finishing_bonus);
+	virtual void on_not_observer() {}
 
 protected:
 	virtual void play_turn(bool save);
@@ -93,6 +94,7 @@ protected:
 	const cursor::setter cursor_setter;
 	std::deque<config> data_backlog_;
 	gui::floating_textbox textbox_info_;
+
 	replay_network_sender replay_sender_;
 
 	bool end_turn_;

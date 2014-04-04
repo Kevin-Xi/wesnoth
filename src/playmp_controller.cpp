@@ -52,9 +52,8 @@ playmp_controller::playmp_controller(const config& level,
 	if ( replay_last_turn_ <= 1)
 	{
 		skip_replay_ = false;
-		blindfold_.unblind();
-	} else if (blindfold_replay_) { 
-		//blindfold_ = resources::screen->video().lock_updates(true);
+	} 
+	if (blindfold_replay_) { 
 		LOG_NG << " *** Putting on the blindfold now " << std::endl;
 	}
 }
@@ -111,6 +110,19 @@ void playmp_controller::before_human_turn(bool save){
 	init_turn_data();
 }
 
+void playmp_controller::on_not_observer() {
+	remove_blindfold();
+}
+
+void playmp_controller::remove_blindfold() {
+	if (resources::screen->is_blindfolded()) {
+		blindfold_.unblind();
+		LOG_NG << " *** Taking off the blindfold now " << std::endl;
+		resources::screen->redraw_everything();
+	}
+}
+
+
 bool playmp_controller::counting_down() {
 	return beep_warning_time_ > 0;
 }
@@ -164,11 +176,7 @@ namespace {
 void playmp_controller::play_human_turn(){
 	LOG_NG << "playmp::play_human_turn...\n";
 
-	if (resources::screen->is_blindfolded()) {
-		blindfold_.unblind();
-		LOG_NG << " *** Taking off the blindfold now " << std::endl;
-		resources::screen->redraw_everything();
-	}
+	remove_blindfold();
 
 	command_disabled_resetter reset_commands;
 	int cur_ticks = SDL_GetTicks();
@@ -241,19 +249,10 @@ void playmp_controller::play_human_turn(){
 					// because remote players only notice network disconnection
 					// Current solution end remaining turns automatically
 					current_team().set_countdown_time(10);
-				} else {
-					const int maxtime = gamestate_.mp_settings().mp_countdown_reservoir_time;
-					int secs = gamestate_.mp_settings().mp_countdown_turn_bonus;
-					secs += action_increment  * current_team().action_bonus_count();
-					current_team().set_action_bonus_count(0);
-					secs = (secs > maxtime) ? maxtime : secs;
-					current_team().set_countdown_time(1000 * secs);
 				}
 				turn_data_->send_data();
 
-				if (!rand_rng::has_new_seed_callback()) {
-					throw end_turn_exception();
-				}
+				throw end_turn_exception();
 			}
 		}
 
@@ -425,8 +424,6 @@ void playmp_controller::finish_side_turn(){
 	//halt and cancel the countdown timer
 	reset_countdown();
 
-	// avoid callback getting called in the wrong turn
-	rand_rng::clear_new_seed_callback();
 }
 
 void playmp_controller::play_network_turn(){
@@ -466,6 +463,19 @@ void playmp_controller::play_network_turn(){
 				} else if (result == turn_info::PROCESS_END_TURN) {
 					break;
 				}
+			}
+			/*
+				we might have data left in replay that we recieved during prestart events. (or maybe other events.)
+			*/
+			else if(!recorder.at_end())
+			{
+				bool was_skipping = recorder.is_skipping();
+				recorder.set_skip(skip_replay_);
+				if(do_replay(current_side()))
+				{
+					break;
+				}
+				recorder.set_skip(was_skipping);
 			}
 		}
 

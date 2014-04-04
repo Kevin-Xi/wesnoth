@@ -30,6 +30,7 @@
 #include "playcampaign.hpp"
 #include "preferences_display.hpp"
 #include "replay.hpp"
+#include "sdl/exception.hpp"
 #include "serialization/binary_or_text.hpp"
 #include "serialization/parser.hpp"
 #include "serialization/validator.hpp"
@@ -420,9 +421,6 @@ static int do_gameloop(int argc, char** argv)
 		return finished;
 	}
 
-	//ensure recorder has an actually random seed instead of what it got during
-	//static initialization (before any srand() call)
-	recorder.set_seed(rand());
 	boost::scoped_ptr<game_controller> game(
 		new game_controller(cmdline_opts,argv[0]));
 	const int start_ticks = SDL_GetTicks();
@@ -720,6 +718,9 @@ int main(int argc, char** argv)
 	} catch(game_logic::formula_error& e) {
 		std::cerr << e.what()
 			<< "\n\nGame will be aborted.\n";
+		return 1;
+	} catch(const sdl::texception& e) {
+		std::cerr << e.what();
 		return 1;
 	} catch(game::error &) {
 		// A message has already been displayed.

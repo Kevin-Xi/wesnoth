@@ -922,9 +922,9 @@ void game_display::send_notification(const std::string& /*owner*/, const std::st
 
 	if (i != i_end) {
 		i->message = message + "\n" + i->message;
-		int endl_pos = 0;
+		int endl_pos = -1;
 		for (int ctr = 0; ctr < 5; ctr++)
-			endl_pos = i->message.find('\n', endl_pos);
+			endl_pos = i->message.find('\n', endl_pos+1);
 
 		i->message = i->message.substr(0,endl_pos);
 
@@ -1062,7 +1062,7 @@ void game_display::add_chat_message(const time_t& time, const std::string& speak
 		// We've had a joker who send an invalid utf-8 message to crash clients
 		// so now catch the exception and ignore the message.
 		msg = font::word_wrap_text(msg,font::SIZE_SMALL,map_outside_area().w*3/4);
-	} catch (utils::invalid_utf8_exception&) {
+	} catch (utf8::invalid_utf8_exception&) {
 		ERR_NG << "Invalid utf-8 found, chat message is ignored.\n";
 		return;
 	}

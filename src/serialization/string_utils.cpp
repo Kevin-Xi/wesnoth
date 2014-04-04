@@ -24,7 +24,9 @@
 #include "gettext.hpp"
 #include "log.hpp"
 #include "serialization/string_utils.hpp"
+#include "serialization/unicode.hpp"
 #include "util.hpp"
+#include <cassert>
 #include <boost/array.hpp>
 #include <boost/lexical_cast.hpp>
 
@@ -225,7 +227,7 @@ std::vector< std::string > square_parenthetical_split(std::string const &val,
 										<< s_begin << " and " << s_end <<".\n";
 						}
 						if (padding_end > padding) padding = padding_end;
-						
+
 						int increment = (end >= begin ? 1 : -1);
 						end+=increment; //include end in expansion
 						for (int k=begin; k!=end; k+=increment) {
@@ -840,232 +842,12 @@ std::vector< std::pair< int, int > > parse_ranges(std::string const &str)
 	return to_return;
 }
 
-static int byte_size_from_utf8_first(unsigned char ch)
-{
-	int count;
-
-	if ((ch & 0x80) == 0)
-		count = 1;
-	else if ((ch & 0xE0) == 0xC0)
-		count = 2;
-	else if ((ch & 0xF0) == 0xE0)
-		count = 3;
-	else if ((ch & 0xF8) == 0xF0)
-		count = 4;
-	else if ((ch & 0xFC) == 0xF8)
-		count = 5;
-	else if ((ch & 0xFE) == 0xFC)
-		count = 6;
-	else
-		throw invalid_utf8_exception(); // Stop on invalid characters
-
-	return count;
-}
-
-utf8_iterator::utf8_iterator(const std::string& str) :
-	current_char(0),
-	string_end(str.end()),
-	current_substr(std::make_pair(str.begin(), str.begin()))
-{
-	update();
-}
-
-utf8_iterator::utf8_iterator(std::string::const_iterator const &beg,
-		std::string::const_iterator const &end) :
-	current_char(0),
-	string_end(end),
-	current_substr(std::make_pair(beg, beg))
-{
-	update();
-}
-
-utf8_iterator utf8_iterator::begin(std::string const &str)
-{
-	return utf8_iterator(str.begin(), str.end());
-}
-
-utf8_iterator utf8_iterator::end(const std::string& str)
-{
-	return utf8_iterator(str.end(), str.end());
-}
-
-bool utf8_iterator::operator==(const utf8_iterator& a) const
-{
-	return current_substr.first == a.current_substr.first;
-}
-
-utf8_iterator& utf8_iterator::operator++()
-{
-	current_substr.first = current_substr.second;
-	update();
-	return *this;
-}
-
-wchar_t utf8_iterator::operator*() const
-{
-	return current_char;
-}
-
-bool utf8_iterator::next_is_end()
-{
-	if(current_substr.second == string_end)
-		return true;
-	return false;
-}
-
-const std::pair<std::string::const_iterator, std::string::const_iterator>& utf8_iterator::substr() const
-{
-	return current_substr;
-}
-
-void utf8_iterator::update()
-{
-	// Do not try to update the current unicode char at end-of-string.
-	if(current_substr.first == string_end)
-		return;
-
-	size_t size = byte_size_from_utf8_first(*current_substr.first);
-	current_substr.second = current_substr.first + size;
-
-	current_char = static_cast<unsigned char>(*current_substr.first);
-
-	// Convert the first character
-	if(size != 1) {
-		current_char &= 0xFF >> (size + 1);
-	}
-
-	// Convert the continuation bytes
-	for(std::string::const_iterator c = current_substr.first+1;
-			c != current_substr.second; ++c) {
-		// If the string ends occurs within an UTF8-sequence, this is bad.
-		if (c == string_end)
-			throw invalid_utf8_exception();
-
-		if ((*c & 0xC0) != 0x80)
-			throw invalid_utf8_exception();
-
-		current_char = (current_char << 6) | (static_cast<unsigned char>(*c) & 0x3F);
-	}
-}
-
-
-std::string wstring_to_string(const wide_string &src)
-{
-	std::string ret;
-
-	try {
-		for(wide_string::const_iterator i = src.begin(); i != src.end(); ++i) {
-			unsigned int count;
-			wchar_t ch = *i;
-
-			// Determine the bytes required
-			count = 1;
-			if(ch >= 0x80)
-				count++;
-
-			Uint32 bitmask = 0x800;
-			for(unsigned int j = 0; j < 5; ++j) {
-				if(static_cast<Uint32>(ch) >= bitmask) {
-					count++;
-				}
-
-				bitmask <<= 5;
-			}
-
-			if(count > 6) {
-				throw invalid_utf8_exception();
-			}
-
-			if(count == 1) {
-				ret.push_back(static_cast<char>(ch));
-			} else {
-				for(int j = static_cast<int>(count) - 1; j >= 0; --j) {
-					unsigned char c = (ch >> (6 * j)) & 0x3f;
-					c |= 0x80;
-					if(j == static_cast<int>(count) - 1) {
-						c |= 0xff << (8 - count);
-					}
-					ret.push_back(c);
-				}
-			}
-
-		}
-
-		return ret;
-	}
-	catch(invalid_utf8_exception&) {
-		ERR_GENERAL << "Invalid wide character string\n";
-		return ret;
-	}
-}
-
-std::string wchar_to_string(const wchar_t c)
-{
-	wide_string s;
-	s.push_back(c);
-	return wstring_to_string(s);
-}
-
-wide_string string_to_wstring(const std::string &src)
-{
-	wide_string res;
-
-	try {
-		utf8_iterator i1(src);
-		const utf8_iterator i2(utf8_iterator::end(src));
-
-		// Equivalent to res.insert(res.end(),i1,i2) which doesn't work on VC++6.
-		while(i1 != i2) {
-			res.push_back(*i1);
-			++i1;
-		}
-	}
-	catch(invalid_utf8_exception&) {
-		ERR_GENERAL << "Invalid UTF-8 string: \"" << src << "\"\n";
-		return res;
-	}
-
-	return res;
-}
-
-utf8_string lowercase(const utf8_string& s)
-{
-	if(!s.empty()) {
-		utf8_iterator itor(s);
-		std::string res;
-
-		for(;itor != utf8_iterator::end(s); ++itor) {
-#if defined(__APPLE__) || defined(__OpenBSD__)
-			/** @todo FIXME: Should we support towupper on recent OSX platforms? */
-			wchar_t uchar = *itor;
-			if(uchar >= 0 && uchar < 0x100)
-				uchar = tolower(uchar);
-			res += utils::wchar_to_string(uchar);
-#else
-			res += utils::wchar_to_string(towlower(*itor));
-#endif
-		}
-
-		res.append(itor.substr().second, s.end());
-		return res;
-	}
-	return s;
-}
-
-void truncate_as_wstring(std::string& str, const size_t size)
-{
-	wide_string utf8_str = utils::string_to_wstring(str);
-	if(utf8_str.size() > size) {
-		utf8_str.resize(size);
-		str = utils::wstring_to_string(utf8_str);
-	}
-}
 
 void ellipsis_truncate(std::string& str, const size_t size)
 {
 	const size_t prev_size = str.length();
 
-	truncate_as_wstring(str, size);
+	utf8::truncate(str, size);
 
 	if(str.length() != prev_size) {
 		str += ellipsis;

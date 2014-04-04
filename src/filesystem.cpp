@@ -54,6 +54,7 @@
 #include "loadscreen.hpp"
 #include "scoped_resource.hpp"
 #include "serialization/string_utils.hpp"
+#include "serialization/unicode.hpp"
 #include "version.hpp"
 
 #include <boost/foreach.hpp>
@@ -371,7 +372,7 @@ bool make_directory(const std::string& path)
 
 bool looks_like_pbl(const std::string& file)
 {
-	return utils::wildcard_string_match(utils::lowercase(file), "*.pbl");
+	return utils::wildcard_string_match(utf8::lowercase(file), "*.pbl");
 }
 
 // This deletes a directory with no hidden files and subdirectories.

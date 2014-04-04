@@ -216,6 +216,7 @@ set(libwesnoth-core_STAT_SRC
 	serialization/preprocessor.cpp
 	serialization/string_utils.cpp
 	serialization/tokenizer.cpp
+	serialization/unicode.cpp
 	serialization/validator.cpp
 )
 
@@ -358,6 +359,8 @@ endif()
 
 set(wesnoth-sdl_SRC
 	sdl/alpha.cpp
+	sdl/exception.cpp
+	sdl/texture.cpp
 	sdl/window.cpp
 )
 
@@ -691,6 +694,7 @@ set(wesnoth-main_SRC
 	callable_objects.cpp
 	commandline_options.cpp
 	config_cache.cpp
+	config_assign.cpp
 	controller_base.cpp
 	desktop_util.cpp
 	dialogs.cpp
@@ -841,7 +845,11 @@ set(wesnoth-main_SRC
 	playsingle_controller.cpp
 	playturn.cpp
 	portrait.cpp
+	random_new.cpp
+	random_new_deterministic.cpp
+	random_new_synced.cpp
 	replay.cpp
+	replay_helper.cpp
 	replay_controller.cpp
 	resources.cpp
 	save_blocker.cpp
@@ -860,6 +868,9 @@ set(wesnoth-main_SRC
 	storyscreen/part.cpp
 	storyscreen/render.cpp
 	strftime.cpp
+	synced_checkup.cpp
+	synced_context.cpp
+	synced_commands.cpp
 	team.cpp
 	terrain_filter.cpp
 	tod_manager.cpp
@@ -934,6 +945,7 @@ set(libwesnoth-game_STAT_SRC
 	reports.cpp
 	sdl_utils.cpp
 	show_dialog.cpp
+	simple_rng.cpp
 	sound.cpp
 	soundsource.cpp
 	sound_music_track.cpp

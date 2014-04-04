@@ -181,35 +181,33 @@ bool ttext::is_truncated() const
 
 unsigned ttext::insert_text(const unsigned offset, const std::string& text)
 {
-	if(text.empty()) {
+	if (text.empty() || length_ == maximum_length_) {
 		return 0;
 	}
 
-	return insert_unicode(offset, utils::string_to_wstring(text));
-}
-
-bool ttext::insert_unicode(const unsigned offset, const wchar_t unicode)
-{
-	return (insert_unicode(offset, wide_string(1, unicode)) == 1);
-}
-
-unsigned ttext::insert_unicode(const unsigned offset, const wide_string& unicode)
-{
+	// do we really need that assert? utf8::insert will just append in this case, which seems fine
 	assert(offset <= length_);
 
-	if(length_ == maximum_length_) {
-		return 0;
+	unsigned len = utf8::size(text);
+	if (length_ + len > maximum_length_) {
+		len = maximum_length_ - length_;
 	}
-
-	const unsigned len = length_ + unicode.size() > maximum_length_
-		? maximum_length_ - length_  : unicode.size();
-
-	wide_string tmp = utils::string_to_wstring(text_);
-	tmp.insert(tmp.begin() + offset, unicode.begin(), unicode.begin() + len);
-
-	set_text(utils::wstring_to_string(tmp), false);
-
+	const utf8::string insert = text.substr(0, utf8::index(text, len));
+	utf8::string tmp = text_;
+	set_text(utf8::insert(tmp, offset, insert), false);
+	// report back how many characters were actually inserted (e.g. to move the cursor selection)
 	return len;
+}
+
+bool ttext::insert_unicode(const unsigned offset, ucs4::char_t unicode)
+{
+	return (insert_unicode(offset, ucs4::string(1, unicode)) == 1);
+}
+
+unsigned ttext::insert_unicode(const unsigned offset, const ucs4::string& unicode)
+{
+	const utf8::string insert = unicode_cast<utf8::string>(unicode);
+	return insert_text(offset, insert);
 }
 
 gui2::tpoint ttext::get_cursor_position(
@@ -295,8 +293,8 @@ bool ttext::set_text(const std::string& text, const bool markedup)
 	if(markedup != markedup_text_ || text != text_) {
 		assert(layout_);
 
-		const wide_string wide = utils::string_to_wstring(text);
-		const std::string narrow = utils::wstring_to_string(wide);
+		const ucs4::string wide = unicode_cast<ucs4::string>(text);
+		const std::string narrow = unicode_cast<utf8::string>(wide);
 		if(text != narrow) {
 			ERR_GUI_L << "ttext::" << __func__
 					<< " text '" << text
@@ -449,10 +447,8 @@ ttext& ttext::set_maximum_length(const size_t maximum_length)
 	if(maximum_length != maximum_length_) {
 		maximum_length_ = maximum_length;
 		if(length_ > maximum_length_) {
-
-			wide_string tmp = utils::string_to_wstring(text_);
-			tmp.resize(maximum_length_);
-			set_text(utils::wstring_to_string(tmp), false);
+			utf8::string tmp = text_;
+			set_text(utf8::truncate(tmp, maximum_length_), false);
 		}
 	}
 
@@ -598,7 +594,7 @@ struct decode_table
 	}
 };
 
-static decode_table decode_table;
+static struct decode_table decode_table;
 
 
 #ifndef _WIN32

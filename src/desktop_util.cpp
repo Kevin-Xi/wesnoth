@@ -15,7 +15,7 @@
 #include "desktop_util.hpp"
 
 #include "log.hpp"
-#include "serialization/string_utils.hpp"
+#include "serialization/unicode.hpp"
 
 #if defined(_X11) || defined(__APPLE__)
 
@@ -91,10 +91,10 @@ bool open_object(const std::string& path_or_url)
 
 	LOG_DU << "open_object(): on Win32, will use ShellExecute()\n";
 
-	wide_string wpath = utils::string_to_wstring(path_or_url);
-	wpath.push_back(wchar_t(0)); // Make wpath NULL-terminated
+	utf16::string u16path = unicode_cast<utf16::string>(path_or_url);
+	u16path.push_back(wchar_t(0)); // Make wpath NULL-terminated
 
-	const ptrdiff_t res = reinterpret_cast<ptrdiff_t>(ShellExecute(NULL, L"open", &wpath.front(), NULL, NULL, SW_SHOW));
+	const ptrdiff_t res = reinterpret_cast<ptrdiff_t>(ShellExecute(NULL, L"open", &u16path.front(), NULL, NULL, SW_SHOW));
 	if(res <= 32) {
 		ERR_DU << "open_object(): ShellExecute() failed (" << res << ")\n";
 		return false;

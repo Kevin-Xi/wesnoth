@@ -16,13 +16,10 @@
 
 #if SDL_VERSION_ATLEAST(2, 0, 0)
 
-#include "exceptions.hpp"
-#include "log.hpp"
+#include "sdl/exception.hpp"
+#include "sdl/texture.hpp"
 
 #include <SDL_render.h>
-
-static lg::log_domain log_display("display");
-#define ERR_DP LOG_STREAM(err, log_display)
 
 namespace sdl
 {
@@ -35,20 +32,28 @@ twindow::twindow(const std::string& title,
 				 const Uint32 window_flags,
 				 const Uint32 render_flags)
 	: window_(SDL_CreateWindow(title.c_str(), x, y, w, h, window_flags))
+	, pixel_format_(SDL_PIXELFORMAT_UNKNOWN)
 {
 	if(!window_) {
-		ERR_DP << "Failed to create a SDL_Window object with error »"
-			   << SDL_GetError() << "«.\n";
-
-		throw game::error("");
+		throw texception("Failed to create a SDL_Window object.", true);
 	}
 
 	if(!SDL_CreateRenderer(window_, -1, render_flags)) {
-		ERR_DP << "Failed to create a SDL_Window object with error »"
-			   << SDL_GetError() << "«.\n";
-
-		throw game::error("");
+		throw texception("Failed to create a SDL_Renderer object.", true);
 	}
+
+	SDL_RendererInfo info;
+	if(SDL_GetRendererInfo(*this, &info) != 0) {
+		throw texception("Failed to retrieve the information of the renderer.",
+						 true);
+	}
+
+	if(info.num_texture_formats == 0) {
+		throw texception("The renderer has no texture information available.\n",
+						 false);
+	}
+
+	pixel_format_ = info.texture_formats[0];
 }
 
 twindow::~twindow()
@@ -81,6 +86,11 @@ void twindow::set_title(const std::string& title)
 void twindow::set_icon(const surface& icon)
 {
 	SDL_SetWindowIcon(window_, icon);
+}
+
+ttexture twindow::create_texture(const int access, const int w, const int h)
+{
+	return ttexture(*SDL_GetRenderer(window_), pixel_format_, access, w, h);
 }
 
 twindow::operator SDL_Window*()

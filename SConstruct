@@ -110,8 +110,9 @@ opts.AddVariables(
 # Setup
 #
 
-sys.path.insert(0, "./scons")
-env = Environment(tools=["tar", "gettext", "install", "python_devel", "scanreplace"], options = opts, toolpath = ["scons"])
+toolpath = ["scons"] + map(lambda x : x.abspath + "/scons", Dir(".").repositories)
+sys.path = toolpath + sys.path
+env = Environment(tools=["tar", "gettext", "install", "python_devel", "scanreplace"], options = opts, toolpath = toolpath)
 
 if env["lockfile"]:
     print "Creating lockfile"
@@ -269,7 +270,7 @@ def Warning(message):
     return False
 
 from metasconf import init_metasconf
-configure_args = dict(custom_tests = init_metasconf(env, ["cplusplus", "python_devel", "sdl", "boost", "pango", "pkgconfig", "gettext", "lua"]), config_h = "config.h",
+configure_args = dict(custom_tests = init_metasconf(env, ["cplusplus", "python_devel", "sdl", "boost", "pango", "pkgconfig", "gettext", "lua"]), config_h = "$build_dir/config.h",
     log_file="$build_dir/config.log", conf_dir="$build_dir/sconf_temp")
 
 env.MergeFlags(env["extra_flags_config"])
@@ -418,7 +419,10 @@ if not env['nls']:
 #
 
 for env in [test_env, client_env, env]:
-    env.Prepend(CPPPATH = ["#/", "#/src"])
+    build_root="#/"
+    if os.path.isabs(env["build_dir"]):
+        build_root = ""
+    env.Prepend(CPPPATH = [build_root + "$build_dir", "#/src"])
 
     env.Append(CPPDEFINES = ["HAVE_CONFIG_H"])
 
@@ -471,7 +475,7 @@ if not env['static_test']:
     test_env.Append(CPPDEFINES = "BOOST_TEST_DYN_LINK")
 
 try:
-    if call("utils/autorevision -t h > revision.h", shell=True) == 0:
+    if call(env.subst("utils/autorevision -t h > $build_dir/revision.h"), shell=True) == 0:
         env["have_autorevision"] = True
 except:
     pass
@@ -547,7 +551,7 @@ def CopyFilter(fn):
 
 env["copy_filter"] = CopyFilter
 
-linguas = Split(open("po/LINGUAS").read())
+linguas = Split(File("po/LINGUAS").get_contents())
 
 def InstallManpages(env, component):
     env.InstallData("mandir", component, os.path.join("doc", "man", component + ".6"), "man6")

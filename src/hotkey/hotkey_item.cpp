@@ -19,7 +19,7 @@
 #define GETTEXT_DOMAIN "wesnoth-lib"
 
 #include "gettext.hpp"
-#include "serialization/string_utils.hpp"
+#include "serialization/unicode.hpp"
 #include "sdl_utils.hpp"
 
 #include "boost/foreach.hpp"
@@ -360,7 +360,7 @@ void hotkey_item::load_from_config(const config& cfg)
 		return;
 	}
 
-	wide_string wkey = utils::string_to_wstring(key);
+	ucs4::string wkey = unicode_cast<ucs4::string>(key);
 
 	// They may really want a specific key on the keyboard:
 	// we assume that any single character keyname is a character.
@@ -462,7 +462,7 @@ void hotkey_item::save(config& item) const
 	if (get_hat()       >= 0) item["hat"]      = get_hat();
 	if (get_value()     >= 0) item["value"]    = get_value();
 	if (get_keycode()   >= 0) item["key"]      = SDL_GetKeyName(SDLKey(get_keycode()));
-	if (get_character() >= 0) item["key"]      = utils::wchar_to_string(get_character());
+	if (get_character() >= 0) item["key"]      = unicode_cast<utf8::string, ucs4::char_t>(get_character()); // Second template argument because get_character returns a signed int
 	if (get_mouse()     >= 0) item["mouse"]    = get_mouse();
 	if (get_button()    >= 0) item["button"]   = get_button();
 

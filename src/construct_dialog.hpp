@@ -145,7 +145,7 @@ private:
 	std::vector<std::string> last_words;
 	size_t header_row_;
 	gui::dialog& dialog_;
-	virtual void handle_text_changed(const wide_string& text);
+	virtual void handle_text_changed(const ucs4::string& text);
 };
 
 class dialog_button : public button {
@@ -223,7 +223,7 @@ public:
 
 	//Constructor & destructor
 	//dialog - throws button::error() if standard buttons fail to initialize
-	//         throws utils::invalid_utf8_exception() if message is invalid
+	//         throws utf8::invalid_utf8_exception() if message is invalid
 	dialog(display &disp,
 	       const std::string& title="",
 	       const std::string& message="",

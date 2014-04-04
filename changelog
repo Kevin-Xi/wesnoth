@@ -4,13 +4,19 @@ Version 1.13.0-dev:
      game had been reloaded (bug #21750). This was a general bug in the RCA AI
      mechanism and applied to other CAs as well, but it was most visible in the
      Micro AIs.
+   * Messenger Micro AI: fix rare bug in attacks by messenger
+   * Patrol Micro AI: fixed bug in the attack part of this MAI
  * Campaigns:
    * The Hammer of Thursagan:
      * Fixed missing objective in 'The Court of Karrag'.
+     * Rebalanced scenarios 'Invaders', Mages and Drakes' and 'Fear'.
+ * C++ Engine:
+   * Purge "human_ai" controller type. This is a fixup of bugfix #18829 below.
  * Language and i18n:
-   * Updated translations: German, Scottish Gaelic, Slovak
+   * Updated translations: German, Greek, Hungarian, Italian, Scottish Gaelic,
+     Slovak
  * Lua API:
-   * Fix bug #21761: wesnoth.synchronize_choice will now give a warning when 
+   * Fix bug #21761: wesnoth.synchronize_choice will now give a warning when
      the table returned by the user-specified function is not completely valid,
      when wesnoth is running in debug mode (--debug command line flag).
  * Units:
@@ -20,6 +26,9 @@ Version 1.13.0-dev:
    * New chill tempest animation for Lich/Ancient Lich
  * User interface:
    * Made orb and minmap colors configurable by the game preferences.
+ * WML engine:
+   * Added customizable recall costs for unit types and individual units,
+     using the new recall_cost attribute in [unit_type] and [unit].
  * Miscellaneous and bug fixes:
    * Fix Fisher-Yates implemenation of Lua helper.shuffle (bug #21706)
    * Fixed issues with the ~BG() image path function not always working with
@@ -29,6 +38,33 @@ Version 1.13.0-dev:
    * Changed: Dropped support for AmigaOS, BeOS, and OS/2.
    * Increased the sound mixer channel allocation from 16 to 32, thereby
      raising the limit for simultaneous sound effects from 5 to 21.
+   * Fix bug #21758: "Ready not blocked while player pick faction."
+   * Fix bug #18829: "ai sides show up as "controller=network" on remote clients".
+     This issue is the source of some difficulties with mp campaigns which occur
+     when the campaign is reloaded from a non-host side, or after a player rejoins
+     from observer status. Hopefully, reloading campaigns is easier after this.
+   * Fix bug #21797: "Mandatory WML child missing" when leaving a reloaded game.
+   * Fix bug #21808: Cannot join a reloaded game as an observer.
+   * Fixed halos glitching through locations that become shrouded after the
+     halo is rendered for the first time.
+   * OS X user data directory is now ~/Library/Application Support/Wesnoth_1.13
+   * Fix bug #21257: Lagging animations with skip AI animations and fog/shroud.
+   * Improved unicode handling on windows for characters outside the Basic
+     Multilingual Plane.
+   * Fix bug #3856: The turn dialog used in hotseat MP play now applies 
+     a blindfold for the duration of the dialog.
+   * Petrified units are no longer displayed in the "Damage versus" tooltip.
+   * Fix bug #21759: "timer refreshed too often when time runs out"
+   * Use one combo box instead of check boxes for replay options "skip replay"
+     and "enter blindfold". This fixes the mp lobby in width <= 800 resolutions.
+     Fixes bug #21888.
+   * MP server now commits controller changes to the replay rather than updating
+     as we go along. Among other things these means that players that join an
+     scenario with ai sides which has already started won't have corrupted 
+     controller types which would prevent them from successfully saving and 
+     reloading in the future. 
+     We have also moved all "controller tweaks" associated to the start of MP 
+     games to server-side rather than having a mix of client and server code.
 
 Version 1.11.11:
  * Add-ons server:

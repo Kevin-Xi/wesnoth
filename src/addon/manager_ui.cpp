@@ -460,7 +460,7 @@ struct addon_pointer_list_sorter
 		switch(sort_) {
 		case SORT_NAMES:
 			// Alphanumerical by name, case insensitive.
-			return utils::lowercase(a->second.title) < utils::lowercase(b->second.title);
+			return utf8::lowercase(a->second.title) < utf8::lowercase(b->second.title);
 		case SORT_UPDATED:
 			// Numerical by last upload TS.
 			return a->second.updated < b->second.updated;
@@ -664,10 +664,10 @@ void show_addons_manager_dialog(display& disp, addons_client& client, addons_lis
 		// Versions are too important in upgrades mode, so don't
 		// truncate them then.
 		if(!updates_only) {
-			utils::truncate_as_wstring(display_version, 12);
+			utf8::truncate_as_ucs4(display_version, 12);
 
 			if(state == ADDON_INSTALLED_UPGRADABLE || state == ADDON_INSTALLED_OUTDATED) {
-				utils::truncate_as_wstring(display_old_version, 12);
+				utf8::truncate_as_ucs4(display_old_version, 12);
 
 				if(state == ADDON_INSTALLED_UPGRADABLE) {
 					display_version =
