@@ -1,7 +1,7 @@
 local H = wesnoth.require "lua/helper.lua"
 local W = H.set_wml_action_metatable {}
 local AH = wesnoth.require "ai/lua/ai_helper.lua"
-local MAIUV = wesnoth.dofile "ai/micro_ais/micro_ai_unit_variables.lua"
+local MAIUV = wesnoth.require "ai/micro_ais/micro_ai_unit_variables.lua"
 local LS = wesnoth.require "lua/location_set.lua"
 local WMPF = wesnoth.require "ai/micro_ais/cas/ca_wolves_multipacks_functions.lua"
 
@@ -12,7 +12,10 @@ function ca_wolves_multipacks_attack:evaluation(ai, cfg)
     -- If wolves have attacks left, call this CA
     -- It will generally be disabled by being black-listed, so as to avoid
     -- having to do the full attack evaluation for every single move
-    local wolves = wesnoth.get_units { side = wesnoth.current.side, type = unit_type, formula = '$this_unit.attacks_left > 0' }
+    local wolves = AH.get_units_with_attacks {
+        side = wesnoth.current.side,
+        type = unit_type
+    }
 
     if wolves[1] then return cfg.ca_score end
     return 0
@@ -43,20 +46,18 @@ function ca_wolves_multipacks_attack:execution(ai, cfg)
 
             -- ... and check if any targets are in reach
             local attacks = {}
-            if wolves[1] then attacks = AH.get_attacks(wolves, { simulate_combat = true }) end
-            --print('pack, wolves, attacks:', pack_number, #wolves, #attacks)
+            if wolves[1] then all_attacks = AH.get_attacks(wolves, { simulate_combat = true }) end
+            --print('pack, wolves, attacks:', pack_number, #wolves, #all_attacks)
 
             -- Eliminate targets that would split up the wolves by more than 3 hexes
             -- This also takes care of wolves joining as a pack rather than attacking individually
-            for i=#attacks,1,-1 do
-                --print(i, attacks[i].x, attacks[i].y)
+            local attacks = {}
+            for _, attack in ipairs(all_attacks) do
                 for j,w in ipairs(wolves) do
-                    local nh = AH.next_hop(w, attacks[i].dst.x, attacks[i].dst.y)
-                    local d = H.distance_between(nh[1], nh[2], attacks[i].dst.x, attacks[i].dst.y)
-                    --print('  ', i, w.x, w.y, d)
-                    if d > 3 then
-                        table.remove(attacks, i)
-                        --print('Removing attack')
+                    local nh = AH.next_hop(w, attack.dst.x, attack.dst.y)
+                    local d = H.distance_between(nh[1], nh[2], attack.dst.x, attack.dst.y)
+                    if d <= 3 then
+                        table.insert(attacks, attack)
                         break
                     end
                 end

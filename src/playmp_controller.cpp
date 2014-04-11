@@ -54,7 +54,7 @@ playmp_controller::playmp_controller(const config& level,
 		skip_replay_ = false;
 	} 
 	if (blindfold_replay_) { 
-		LOG_NG << " *** Putting on the blindfold now " << std::endl;
+		LOG_NG << "Putting on the blindfold now " << std::endl;
 	}
 }
 
@@ -117,7 +117,7 @@ void playmp_controller::on_not_observer() {
 void playmp_controller::remove_blindfold() {
 	if (resources::screen->is_blindfolded()) {
 		blindfold_.unblind();
-		LOG_NG << " *** Taking off the blindfold now " << std::endl;
+		LOG_NG << "Taking off the blindfold now " << std::endl;
 		resources::screen->redraw_everything();
 	}
 }
@@ -254,6 +254,45 @@ void playmp_controller::play_human_turn(){
 
 				throw end_turn_exception();
 			}
+		}
+
+		gui_->draw();
+
+		turn_data_->send_data();
+	}
+}
+
+void playmp_controller::play_idle_loop()
+{
+	LOG_NG << "playmp::play_human_turn...\n";
+
+	remove_blindfold();
+
+	command_disabled_resetter reset_commands;
+
+	while (!end_turn_)
+	{
+		try {
+			config cfg;
+			const network::connection res = network::receive_data(cfg);
+			std::deque<config> backlog;
+
+			if(res != network::null_connection) {
+				if (turn_data_->process_network_data(cfg, res, backlog, skip_replay_) == turn_info::PROCESS_RESTART_TURN)
+				{
+					throw end_turn_exception(gui_->playing_side());
+				}
+			}
+
+			play_slice();
+			check_end_level();
+		} catch(const end_level_exception&) {
+			turn_data_->send_data();
+			throw;
+		}
+
+		if (!linger_) {
+			SDL_Delay(1);
 		}
 
 		gui_->draw();
@@ -573,7 +612,7 @@ bool playmp_controller::can_execute_command(const hotkey::hotkey_command& cmd, i
 
 void playmp_controller::do_idle_notification()
 {
-	resources::screen->add_chat_message(time(NULL), "Wesnoth", 0, 
-		"This side is in an idle state. To proceed with the game, the host must assign it to another controller.",
+	resources::screen->add_chat_message(time(NULL), "", 0, 
+		_("This side is in an idle state. To proceed with the game, it must be assigned to another controller. You may use :droid, :control or :give_control for example."),
 		events::chat_handler::MESSAGE_PUBLIC, false);	
 }

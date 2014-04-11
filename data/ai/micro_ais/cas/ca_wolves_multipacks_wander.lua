@@ -1,7 +1,7 @@
 local H = wesnoth.require "lua/helper.lua"
 local W = H.set_wml_action_metatable {}
 local AH = wesnoth.require "ai/lua/ai_helper.lua"
-local MAIUV = wesnoth.dofile "ai/micro_ais/micro_ai_unit_variables.lua"
+local MAIUV = wesnoth.require "ai/micro_ais/micro_ai_unit_variables.lua"
 local LS = wesnoth.require "lua/location_set.lua"
 local WMPF = wesnoth.require "ai/micro_ais/cas/ca_wolves_multipacks_functions.lua"
 
@@ -11,7 +11,10 @@ function ca_wolves_multipacks_wander:evaluation(ai, cfg)
     local unit_type = cfg.type or "Wolf"
 
     -- When there's nothing to attack, the wolves wander and regroup into their packs
-    local wolves = wesnoth.get_units { side = wesnoth.current.side, type = unit_type, formula = '$this_unit.moves > 0' }
+    local wolves = AH.get_units_with_moves {
+        side = wesnoth.current.side,
+        type = unit_type
+    }
 
     if wolves[1] then return cfg.ca_score end
     return 0

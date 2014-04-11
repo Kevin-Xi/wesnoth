@@ -2,7 +2,7 @@ local H = wesnoth.require "lua/helper.lua"
 local LS = wesnoth.require "lua/location_set.lua"
 local AH = wesnoth.require "ai/lua/ai_helper.lua"
 local BC = wesnoth.require "ai/lua/battle_calcs.lua"
-local MAISD = wesnoth.dofile "ai/micro_ais/micro_ai_self_data.lua"
+local MAISD = wesnoth.require "ai/micro_ais/micro_ai_self_data.lua"
 
 local ca_bottleneck_move = {}
 
@@ -235,13 +235,9 @@ function ca_bottleneck_move:evaluation(ai, cfg, self)
     -- Now find all units, including the leader or not, depending on situation and settings
     local units = {}
     if MAISD.get_mai_self_data(self.data, cfg.ai_id, "side_leader_activated") then
-        units = wesnoth.get_units { side = wesnoth.current.side,
-            formula = '$this_unit.moves > 0'
-        }
+        units = AH.get_units_with_moves { side = wesnoth.current.side }
     else
-        units = wesnoth.get_units { side = wesnoth.current.side, canrecruit = 'no',
-            formula = '$this_unit.moves > 0'
-        }
+        units = AH.get_units_with_moves { side = wesnoth.current.side, canrecruit = 'no' }
     end
 
     -- If there's no units with moves left, nothing to be done here
@@ -487,13 +483,9 @@ function ca_bottleneck_move:execution(ai, cfg, self)
     if self.data.bottleneck_moves_done then
         local units = {}
         if MAISD.get_mai_self_data(self.data, cfg.ai_id, "side_leader_activated") then
-            units = wesnoth.get_units { side = wesnoth.current.side,
-                formula = '$this_unit.moves > 0'
-            }
+            units = AH.get_units_with_moves { side = wesnoth.current.side }
         else
-            units = wesnoth.get_units { side = wesnoth.current.side, canrecruit = 'no',
-                formula = '$this_unit.moves > 0'
-            }
+            units = AH.get_units_with_moves { side = wesnoth.current.side, canrecruit = 'no' }
         end
         for i,u in ipairs(units) do
             AH.checked_stopunit_moves(ai, u)

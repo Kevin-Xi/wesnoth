@@ -2,8 +2,8 @@ local H = wesnoth.require "lua/helper.lua"
 local AH = wesnoth.require "ai/lua/ai_helper.lua"
 local BC = wesnoth.require "ai/lua/battle_calcs.lua"
 local LS = wesnoth.require "lua/location_set.lua"
-local MAIUV = wesnoth.dofile "ai/micro_ais/micro_ai_unit_variables.lua"
-local MAISD = wesnoth.dofile "ai/micro_ais/micro_ai_self_data.lua"
+local MAIUV = wesnoth.require "ai/micro_ais/micro_ai_unit_variables.lua"
+local MAISD = wesnoth.require "ai/micro_ais/micro_ai_self_data.lua"
 
 local ca_goto = {}
 
@@ -29,16 +29,16 @@ function ca_goto:evaluation(ai, cfg, self)
     -- For convenience, we check for locations here, and just pass that to the exec function
     -- This is mostly to make the unique_goals option easier
     local width, height = wesnoth.get_map_size()
-    local locs = wesnoth.get_locations {
+    local all_locs = wesnoth.get_locations {
         x = '1-' .. width,
         y = '1-' .. height,
         { "and", cfg.filter_location }
     }
-    --print('#locs org', #locs)
-    if (#locs == 0) then return 0 end
+    if (#all_locs == 0) then return 0 end
 
     -- If 'unique_goals' is set, check whether there are locations left to go to.
     -- This does not have to be a persistent variable
+    local locs = {}
     if cfg.unique_goals then
         -- First, some cleanup of previous turn data
         local str = 'goals_taken_' .. (wesnoth.current.turn - 1)
@@ -46,27 +46,32 @@ function ca_goto:evaluation(ai, cfg, self)
 
         -- Now on to the current turn
         local str = 'goals_taken_' .. wesnoth.current.turn
-        for i = #locs,1,-1 do
-            if self.data[str] and self.data[str]:get(locs[i][1], locs[i][2]) then
-                table.remove(locs, i)
+        for _, loc in ipairs(all_locs) do
+            if (not self.data[str]) or (not self.data[str]:get(loc[1], loc[2])) then
+                table.insert(locs, loc)
             end
         end
+    else
+        locs = all_locs
     end
-    --print('#locs mod', #locs)
     if (not locs[1]) then return 0 end
 
     -- Find the goto units
-    local units = wesnoth.get_units { side = wesnoth.current.side,
-        { "and", cfg.filter }, formula = '$this_unit.moves > 0'
+    local all_units = AH.get_units_with_moves {
+        side = wesnoth.current.side,
+        { "and", cfg.filter }
     }
 
     -- Exclude released units
+    local units = {}
     if cfg.release_unit_at_goal then
-        for i_unit=#units,1,-1 do
-            if MAIUV.get_mai_unit_variables(units[i_unit], cfg.ai_id, "release") then
-                table.remove(units, i_unit)
+        for _, unit in ipairs(all_units) do
+            if (not MAIUV.get_mai_unit_variables(unit, cfg.ai_id, "release")) then
+                table.insert(units, unit)
             end
         end
+    else
+        units = all_units
     end
     if (not units[1]) then return 0 end
 
