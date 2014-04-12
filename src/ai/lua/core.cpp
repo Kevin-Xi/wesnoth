@@ -25,6 +25,7 @@
 #include <cassert>
 #include <cstring>
 #include <cmath>    // (Kevin)
+#include <queue>    // (Kevin)
 
 #include "core.hpp"
 #include "../../scripting/lua.hpp"
@@ -57,6 +58,11 @@ namespace ai {
 
 static void push_map_location(lua_State *L, const map_location& ml);
 static void push_attack_analysis(lua_State *L, attack_analysis&);
+
+static bool calc_states(lua_State *L, std::list<double> &states_);
+static bool calc_decisions(lua_State *L, int state);
+static bool calc_optimal_policy(lua_State *L);
+std::queue<int> states_;
 
 void lua_ai_context::init(lua_State *L)
 {
@@ -843,8 +849,47 @@ static int cfun_ai_recalculate_move_maps_enemy(lua_State *L)
 
 static int cfun_ai_kevin_analyze(lua_State *L)
 {
+    // Utilizing dynamic programming to find optimal policy
+    // One stage contains two turns, start from AI turn
+    // and end when the following enemy's turn finish.
+
+    // Assume the final stage of dynamic programming is two 
+    // stages ahead, that is, consider three turns totally.
+    const int total_stages = 3;
+    int current_stage = 1;
+
+    // First calculate states of both sides.
+    states_.push(1);
+
+    while (current_stage < total_stages){
+        int state = states_.front();
+        states_.pop();
+
+        // Second calculate decisions based on current states.
+        calc_decisions(L, state);
+
+        current_stage = states_.front();
+        std::cout<<"current stage: "<<current_stage<<" size: "<<states_.size()<<std::endl;
+    }
+
+    // Finally figure out the optimal policy for the total 
+    // three stages.
+    calc_optimal_policy(L);
+
+	return 1;
+}
+
+static bool calc_states(lua_State *L, std::list<double> &states_){
+    //states_.push_back(1.3);
+    return true;
+}
+
+static bool calc_decisions(lua_State *L, int state){
+    states_.push(state+1);
+    states_.push(state+1);
     int side = get_readonly_context(L).get_side();
     gamemap &map_ = *resources::game_map;
+    unit_map &units_ = *resources::units;
     const std::vector<map_location>& villages = map_.villages();
     const int total_village_number = villages.size();
     int own_village_number = 0;
@@ -862,8 +907,15 @@ http://devdocs.wesnoth.org/contexts_8cpp_source.html#1139
     int turns_remain = total_turns - 2;//get_turns();
 
     double village_priority = (2*(total_village_number-own_village_number)*2/*village_gold()*/*turns_remain)/(1+exp(own_village_number+total_village_number/2+tod_modifier));
-    lua_pushnumber(L, village_priority);
-	return 1;
+    lua_pushnumber(L, 12);
+
+    // 2 pushes
+    
+    return true;
+}
+
+static bool calc_optimal_policy(lua_State *L){
+    return true;
 }
 
 static void generate_and_push_ai_table(lua_State* L, ai::engine_lua* engine) {
