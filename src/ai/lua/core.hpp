@@ -16,6 +16,9 @@
 #define AI_LUA_CORE_HPP
 
 #include <boost/shared_ptr.hpp>
+#include "../../unit.hpp"  // (Kevin)
+#include "../../map.hpp"  // (Kevin)
+#include "../../team.hpp"  // (Kevin)
 
 struct lua_State;
 class LuaKernel;
@@ -76,6 +79,26 @@ public:
 	~lua_ai_action_handler();
 	void handle(config &, bool configOut, lua_object_ptr);
 	friend class ::LuaKernel;
+};
+
+
+/**
+ * Proxy class for calling AI action handlers defined in Lua.
+ */
+class stage_state
+{
+private:
+    const unit_map units_;
+    const gamemap map_; // Maybe don't need if we have team
+    const std::vector<team> teams_;
+    int stage_no_;   // Stage variable.
+    double state_value_; // State variable.
+
+public:
+    stage_state(lua_State *L, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_, int stage_no_);
+    int get_stage_no() const;
+    double get_state_value();
+    ~stage_state();
 };
 
 }//of namespace ai
