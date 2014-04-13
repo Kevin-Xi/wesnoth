@@ -121,7 +121,7 @@ public:
     static const int total_decision = 2;
 
     decision();
-    stage_state calc_decision(int decision_no_, stage_state &state_);
+    stage_state calc_decision(int own_side_, int decision_no_, stage_state &state_);
     std::string describe();
     std::string recommend_ca();
     double get_gain();

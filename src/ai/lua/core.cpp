@@ -59,7 +59,7 @@ namespace ai {
 static void push_map_location(lua_State *L, const map_location& ml);
 static void push_attack_analysis(lua_State *L, attack_analysis&);
 
-static void calc_decisions(lua_State *L, std::queue<stage_state> &states_);
+static void calc_decisions(int own_side_, std::queue<stage_state> &states_);
 static void calc_optimal_policy(std::queue<stage_state> &states_);
 
 void lua_ai_context::init(lua_State *L)
@@ -850,7 +850,7 @@ static int cfun_ai_kevin_analyze(lua_State *L)
 {
     int own_side_ = get_readonly_context(L).get_side();
 
-    LOG_LUA << "------Kevin_analyze on side " << own_side_ << "------" << std::endl;
+    LOG_LUA << "\n------Kevin_analyze on side " << own_side_ << "------" << std::endl;
 
     std::queue<stage_state> states_;
 
@@ -863,7 +863,7 @@ static int cfun_ai_kevin_analyze(lua_State *L)
     states_.push(*stage_1);
 
     // Second calculate decisions based on current states.
-    calc_decisions(L, states_);
+    calc_decisions(own_side_, states_);
 
     // Finally figure out the optimal policy for the total 
     // three stages.
@@ -873,7 +873,7 @@ static int cfun_ai_kevin_analyze(lua_State *L)
 	return 1;
 }
 
-static void calc_decisions(lua_State *L, std::queue<stage_state> &states_)
+static void calc_decisions(int own_side_, std::queue<stage_state> &states_)
 {
     // Assume the final stage of dynamic programming is two 
     // stages ahead, that is, consider three stages totally.
@@ -886,7 +886,7 @@ static void calc_decisions(lua_State *L, std::queue<stage_state> &states_)
 
         for(int i = 0; i < decision::total_decision; ++i){
             decision *current_decision = new decision();
-            states_.push(current_decision -> calc_decision(i, current_state));
+            states_.push(current_decision -> calc_decision(own_side_, i, current_state));
         }
 
         current_stage = states_.front().get_stage_no();
@@ -905,21 +905,21 @@ static void calc_optimal_policy(std::queue<stage_state> &states_){
     
     stage_state optimal_final_state = states_.front();
     states_.pop();
+    decision optimal_decision = optimal_final_state.get_decision();
 
     while(!states_.empty()){
         stage_state final_state = states_.front();
         states_.pop();
         if(final_state.get_state_value() > optimal_final_state.get_state_value()){  // What if equal?
-            optimal_final_state = final_state;
+            optimal_decision = final_state.get_decision();
         }
     }
 
-    decision optimal_decision = optimal_final_state.get_decision();
     LOG_LUA << "The global optimal policy of this turn is play " << optimal_decision.describe()<< std::endl;
     LOG_LUA << "Candidate actions recommended: " << optimal_decision.recommend_ca() << std::endl;
 }
 
-stage_state::stage_state(int own_side_, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_, int stage_no_):own_side_(own_side_), units_(units_), map_(map_), teams_(teams_), stage_no_(stage_no_), state_value_(0.0)
+stage_state::stage_state(int own_side_, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_, int stage_no_):own_side_(own_side_), units_(units_), map_(map_), teams_(teams_), stage_no_(stage_no_), state_value_(0.0), decision_(*(new decision()))
 {
     const int total_team = teams_.size();   // check
     std::vector<double> state(total_team, 0.0);
@@ -995,9 +995,8 @@ decision::decision()
     //
 }
 
-stage_state decision::calc_decision(int decision_no_, stage_state &state_)
+stage_state decision::calc_decision(int own_side_, int decision_no_, stage_state &state_)
 {
-    int own_side_ = ;
     unit_map &units_ = *resources::units;
     gamemap &map_ = *resources::game_map;
     std::vector<team> &teams_ = *resources::teams;
