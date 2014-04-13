@@ -849,7 +849,6 @@ static int cfun_ai_recalculate_move_maps_enemy(lua_State *L)
 stage_state::stage_state(lua_State *L, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_, int stage_no_):units_(units_), map_(map_), teams_(teams_), stage_no_(stage_no_), state_value_(0.0)
 {
     const int side = get_readonly_context(L).get_side();
-    std::cout<<"KKKKKKKKKKKKKKKKKK"<<side<<std::endl;
     const int total_team = teams_.size();   // check
     std::vector<double> state(total_team, 0.0);
     std::vector<int> total_level(total_team, 0);
@@ -878,7 +877,8 @@ stage_state::stage_state(lua_State *L, const unit_map &units_, const gamemap &ma
         int current_side = ti->side() - 1;
         upkeep_per_turn[current_side] = total_level[current_side]>ti->support() ? total_level[current_side]-ti->support() : 0;
         income_per_turn[current_side] = ti->total_income() - upkeep_per_turn[current_side];
-        gold[current_side] = ti->gold() + income_per_turn[current_side] * turn_left;
+        // The further, the rougher. So drop 0.1 weight for each turn.
+        gold[current_side] = ti->gold() + income_per_turn[current_side] * (1+(1-0.1*double(turn_left-1)))*turn_left/2;
         state[current_side] += gold[current_side];
         
         LOG_LUA << "team " << current_side << " will totally get " << gold[current_side] << " gold." << std::endl;
