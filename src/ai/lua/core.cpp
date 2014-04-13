@@ -50,6 +50,7 @@
 
 static lg::log_domain log_ai_engine_lua("ai/engine/lua");
 #define LOG_LUA LOG_STREAM(info, log_ai_engine_lua)
+#define DBG_LUA LOG_STREAM(debug, log_ai_engine_lua)
 #define ERR_LUA LOG_STREAM(err, log_ai_engine_lua)
 
 static char const aisKey     = 0;
@@ -850,7 +851,7 @@ static int cfun_ai_kevin_analyze(lua_State *L)
 {
     int own_side_ = get_readonly_context(L).get_side();
 
-    LOG_LUA << "\n------Kevin_analyze on side " << own_side_ << "------" << std::endl;
+    LOG_LUA << "------Kevin_analyze on side " << own_side_ << "------" << std::endl;
 
     std::queue<stage_state> states_;
 
@@ -859,7 +860,7 @@ static int cfun_ai_kevin_analyze(lua_State *L)
     // and end when the following enemy's turn finish.
 
     // First calculate states of both sides.
-    stage_state *stage_1 = new stage_state(own_side_, *resources::units, *resources::game_map, *resources::teams, 1);
+    stage_state *stage_1 = new stage_state(own_side_, *resources::units, *resources::game_map, *resources::teams, resources::tod_manager->turn(), 1);
     states_.push(*stage_1);
 
     // Second calculate decisions based on current states.
@@ -917,7 +918,7 @@ static void calc_optimal_policy(std::queue<stage_state> &states_){
     LOG_LUA << "Candidate actions recommended: " << optimal_decision.recommend_ca() << std::endl;
 }
 
-stage_state::stage_state(const int own_side_, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_, const int stage_no_):own_side_(own_side_), units_(units_), map_(map_), teams_(teams_), stage_no_(stage_no_), state_value_(0.0), decision_(*(new decision()))
+stage_state::stage_state(const int own_side_, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_, const int turn_no_, const int stage_no_):own_side_(own_side_), units_(units_), map_(map_), teams_(teams_), turn_no_(turn_no_), stage_no_(stage_no_), state_value_(0.0), decision_(*(new decision()))
 {
     const int total_team = teams_.size();   // check
     std::vector<double> state(total_team, 0.0);
@@ -948,7 +949,7 @@ stage_state::stage_state(const int own_side_, const unit_map &units_, const game
         upkeep_per_turn[current_side] = total_level[current_side]>ti->support() ? total_level[current_side]-ti->support() : 0;
         income_per_turn[current_side] = ti->total_income() - upkeep_per_turn[current_side];
         // The further, the rougher. So drop 0.1 weight for each turn.
-        gold[current_side] = ti->gold() + income_per_turn[current_side] * (1+(1-0.1*double(turn_left-1)))*turn_left/2;
+        gold[current_side] = ti->gold() + income_per_turn[current_side] * (1+(1-0.1*(double)(turn_left-1)))*turn_left/2;
         state[current_side] += gold[current_side];
         
         LOG_LUA << "side " << current_side+1 << " will totally get " << gold[current_side] << " gold." << std::endl;
@@ -983,6 +984,11 @@ const std::vector<team>& stage_state::get_teams() const
     return teams_;
 }
 
+int stage_state::get_turn_no() const
+{
+    return turn_no_;
+}
+
 int stage_state::get_stage_no() const
 {
     return stage_no_;
@@ -1010,30 +1016,44 @@ decision::decision()
 
 const stage_state decision::calc_decision(const int own_side_, const int decision_no_, const stage_state &state_) const
 {
-    const unit_map &units_ = state_.get_units();//*resources::units;
-    const gamemap &map_ = state_.get_map();//*resources::game_map;
-    const std::vector<team> &teams_ = state_.get_teams();//*resources::teams;
+    // Execute CA based on state_ and get return state
+    const unit_map &units_ = state_.get_units();
+    const gamemap &map_ = state_.get_map();
+    const std::vector<team> &teams_ = state_.get_teams();
 
-    stage_state *state_next = new stage_state(own_side_, units_, map_, teams_, state_.get_stage_no()+1);
+    // Analyze villages, the idea based on 
+    // https://docs.google.com/document/d/1tHMdXp5-yh4eNymOVk3gQxvCJ26DZtaC9_1xC6cGwmo/edit?usp=sharing
+    const std::vector<map_location>& villages = map_.villages();
+    const int total_village_number = villages.size();
+    int own_village_number = teams_[own_side_-1].villages().size();
+
+    const int current_turn_no = state_.get_turn_no()+(state_.get_stage_no()-1)*2;
+    const int lawful_bonus = resources::tod_manager->get_time_of_day(current_turn_no).lawful_bonus;
+    int tod_modifier = 0;
+    unit_map::const_unit_iterator own_leader = units_.find_leader(own_side_);
+    if(own_leader->alignment() == unit_type::LAWFUL){
+        tod_modifier = lawful_bonus;
+    } else if(own_leader->alignment() == unit_type::CHAOTIC){
+        tod_modifier = -lawful_bonus;
+    } else if(own_leader->alignment() == unit_type::LIMINAL){
+        tod_modifier = -(abs(lawful_bonus));
+    }
+
+    tod_modifier = (double)total_village_number/2 * (1 + (double)tod_modifier/100);
+    DBG_LUA << "tod " << tod_modifier << std::endl;
+
+    const int total_turns = 6;
+    int turns_remain = total_turns - (state_.get_stage_no()-1)*2;
+
+    DBG_LUA << "divide " << (1+exp(own_village_number+total_village_number/2+tod_modifier)) << std::endl;
+    double village_priority = (2*(total_village_number-own_village_number)*teams_[own_side_-1].village_gold()*turns_remain)/(1+exp((own_village_number+tod_modifier)/5));
+
+    LOG_LUA << "village_priority: " << village_priority << std::endl;
+
+    // Construct new stage after execute CA
+    stage_state *state_next = new stage_state(own_side_, units_, map_, teams_, state_.get_turn_no()+2, state_.get_stage_no()+1);
 
     return *state_next;
-    /*const std::vector<map_location>& villages = map_.villages();
-    const int total_village_number = villages.size();
-    int own_village_number = 0;
-    for(std::vector<map_location>::const_iterator v = villages.begin(); v != villages.end(); v++){
-        const int owner = village_owner(*v);
-        if(side == owner){
-            ++own_village_number;
-        }
-        //LOG_LUA<<*v<<'\t'<<side<<'\t'<<village_owner(*v)<<'\t'<<std::endl;
-    }
-http://devdocs.wesnoth.org/contexts_8cpp_source.html#1139
-
-    const int tod_modifier = 2;//;
-    const int total_turns = (map_.w()>map_.h() ? map_.w() : map_.h())/2;
-    int turns_remain = total_turns - 2;//get_turns();*/
-
-    //double village_priority = (2*(total_village_number-own_village_number)*2/*village_gold()*/*turns_remain)/(1+exp(own_village_number+total_village_number/2+tod_modifier));
 }
 
 const std::string decision::describe() const

@@ -117,15 +117,17 @@ private:
     const unit_map units_;
     const gamemap map_; // Maybe don't need if we have team
     const std::vector<team> teams_;
+    const int turn_no_;
     const int stage_no_;   // Stage variable.
     double state_value_; // State variable.
     decision decision_;
 
 public:
-    stage_state(const int own_side_, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_, const int stage_no_);
+    stage_state(const int own_side_, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_, const int turn_no_, const int stage_no_);
     const unit_map& get_units() const;
     const gamemap& get_map() const;
     const std::vector<team>& get_teams() const;
+    int get_turn_no() const;
     int get_stage_no() const;
     double get_state_value() const;
     const decision& get_decision() const;
