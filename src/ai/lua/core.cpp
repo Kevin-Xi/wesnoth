@@ -59,9 +59,8 @@ namespace ai {
 static void push_map_location(lua_State *L, const map_location& ml);
 static void push_attack_analysis(lua_State *L, attack_analysis&);
 
-static bool calc_states(lua_State *L, std::list<double> &states_);
-static bool calc_decisions(lua_State *L, std::queue<stage_state> &states_, const stage_state &state);
-static bool calc_optimal_policy(lua_State *L);
+static void calc_decisions(lua_State *L, std::queue<stage_state> &states_);
+static void calc_optimal_policy(std::queue<stage_state> &states_);
 
 void lua_ai_context::init(lua_State *L)
 {
@@ -846,9 +845,82 @@ static int cfun_ai_recalculate_move_maps_enemy(lua_State *L)
 	return 1;
 }
 
-stage_state::stage_state(lua_State *L, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_, int stage_no_):units_(units_), map_(map_), teams_(teams_), stage_no_(stage_no_), state_value_(0.0)
+// ------ Kevin_analyze ------
+static int cfun_ai_kevin_analyze(lua_State *L)
 {
-    const int side = get_readonly_context(L).get_side();
+    int own_side_ = get_readonly_context(L).get_side();
+
+    LOG_LUA << "------Kevin_analyze on side " << own_side_ << "------" << std::endl;
+
+    std::queue<stage_state> states_;
+
+    // Utilizing dynamic programming to find optimal policy
+    // One stage contains two turns, start from AI turn
+    // and end when the following enemy's turn finish.
+
+    // First calculate states of both sides.
+    stage_state *stage_1 = new stage_state(own_side_, *resources::units, *resources::game_map, *resources::teams, 1);
+    states_.push(*stage_1);
+
+    // Second calculate decisions based on current states.
+    calc_decisions(L, states_);
+
+    // Finally figure out the optimal policy for the total 
+    // three stages.
+    calc_optimal_policy(states_);
+
+    LOG_LUA << "------Kevin_analyze completed------" << std::endl;
+	return 1;
+}
+
+static void calc_decisions(lua_State *L, std::queue<stage_state> &states_)
+{
+    // Assume the final stage of dynamic programming is two 
+    // stages ahead, that is, consider three stages totally.
+    const int total_stages = 3;
+    int current_stage = 1;
+
+    while (current_stage < total_stages){
+        stage_state current_state = states_.front();
+        states_.pop();
+
+        for(int i = 0; i < decision::total_decision; ++i){
+            decision *current_decision = new decision();
+            states_.push(current_decision -> calc_decision(i, current_state));
+        }
+
+        current_stage = states_.front().get_stage_no();
+        //LOG_LUA <<"current stage: "<<current_stage<<" size: "<<states_.size()<<std::endl;
+    }
+
+
+    //LOG_LUA << "stage_state no: " << state.get_stage_no() << std::endl;
+    //int side = get_readonly_context(L).get_side();
+}
+
+
+static void calc_optimal_policy(std::queue<stage_state> &states_){
+    // Find the optimal policy, by find the maximum state variable
+    // of the final stage.
+    
+    stage_state optimal_final_state = states_.front();
+    states_.pop();
+
+    while(!states_.empty()){
+        stage_state final_state = states_.front();
+        states_.pop();
+        if(final_state.get_state_value() > optimal_final_state.get_state_value()){  // What if equal?
+            optimal_final_state = final_state;
+        }
+    }
+
+    decision optimal_decision = optimal_final_state.get_decision();
+    LOG_LUA << "The global optimal policy of this turn is play " << optimal_decision.describe()<< std::endl;
+    LOG_LUA << "Candidate actions recommended: " << optimal_decision.recommend_ca() << std::endl;
+}
+
+stage_state::stage_state(int own_side_, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_, int stage_no_):own_side_(own_side_), units_(units_), map_(map_), teams_(teams_), stage_no_(stage_no_), state_value_(0.0)
+{
     const int total_team = teams_.size();   // check
     std::vector<double> state(total_team, 0.0);
     std::vector<int> total_level(total_team, 0);
@@ -858,7 +930,7 @@ stage_state::stage_state(lua_State *L, const unit_map &units_, const gamemap &ma
         int current_side = ui->side() - 1;
 
         double unit_value = (double)ui->hitpoints()/(double)ui->max_hitpoints()*(double)ui->cost();
-        LOG_LUA << "side " << current_side << " unit " << ui->type_name() << "'s value is " << unit_value << std::endl;
+        LOG_LUA << "side " << current_side+1 << " unit " << ui->type_name() << "'s value is " << unit_value << std::endl;
         state[current_side] += unit_value;
         total_level[current_side] += ui->level();
     }
@@ -881,14 +953,14 @@ stage_state::stage_state(lua_State *L, const unit_map &units_, const gamemap &ma
         gold[current_side] = ti->gold() + income_per_turn[current_side] * (1+(1-0.1*double(turn_left-1)))*turn_left/2;
         state[current_side] += gold[current_side];
         
-        LOG_LUA << "team " << current_side << " will totally get " << gold[current_side] << " gold." << std::endl;
+        LOG_LUA << "side " << current_side+1 << " will totally get " << gold[current_side] << " gold." << std::endl;
     }
 
 
     for(std::vector<team>::const_iterator ti = teams_.begin(); ti != teams_.end(); ++ti) {
         int current_side = ti->side() - 1;
-        LOG_LUA << "team " << current_side << "'s state: " << state[current_side] << std::endl;
-        if(ti->is_enemy(side)){ // 'is_enemy()' based on 1.
+        LOG_LUA << "side " << current_side+1 << "'s state: " << state[current_side] << std::endl;
+        if(ti->is_enemy(own_side_)){ // 'is_enemy()' based on 1.
             state_value_ -= state[current_side];
         } else {
             state_value_ += state[current_side];
@@ -903,62 +975,37 @@ int stage_state::get_stage_no() const
     return stage_no_;
 }
 
+double stage_state::get_state_value() const
+{
+    return state_value_;
+}
+
+const decision stage_state::get_decision()
+{
+    return decision_;
+}
+
 stage_state::~stage_state()
 {
 
 }
 
-static int cfun_ai_kevin_analyze(lua_State *L)
+decision::decision()
 {
-    std::queue<stage_state> states_;
-
-    // Utilizing dynamic programming to find optimal policy
-    // One stage contains two turns, start from AI turn
-    // and end when the following enemy's turn finish.
-
-    // Assume the final stage of dynamic programming is two 
-    // stages ahead, that is, consider three turns totally.
-    const int total_stages = 3;
-    int current_stage = 1;
-
-    // First calculate states of both sides.
-    stage_state *stage_1 = new stage_state(L, *resources::units, *resources::game_map, *resources::teams, current_stage);
-    states_.push(*stage_1);
-
-    while (current_stage < total_stages){
-        stage_state current_state = states_.front();
-        states_.pop();
-
-        // Second calculate decisions based on current states.
-        calc_decisions(L, states_, current_state);
-
-        current_stage = states_.front().get_stage_no();
-        LOG_LUA <<"current stage: "<<current_stage<<" size: "<<states_.size()<<std::endl;
-    }
-
-    // Finally figure out the optimal policy for the total 
-    // three stages.
-    calc_optimal_policy(L);
-
-	return 1;
+    //
 }
 
-static bool calc_states(lua_State *L, std::list<double> &states_){
-    return true;
-}
-
-static bool calc_decisions(lua_State *L, std::queue<stage_state> &states_, const stage_state &state){
-    LOG_LUA << "stage_state no: " << state.get_stage_no() << std::endl;
-    int side = get_readonly_context(L).get_side();
+stage_state decision::calc_decision(int decision_no_, stage_state &state_)
+{
+    int own_side_ = ;
     unit_map &units_ = *resources::units;
     gamemap &map_ = *resources::game_map;
     std::vector<team> &teams_ = *resources::teams;
 
-    stage_state *state_next = new stage_state(L, units_, map_, teams_, state.get_stage_no()+1);
-    states_.push(*state_next);
-    states_.push(*state_next);
+    stage_state *state_next = new stage_state(own_side_, units_, map_, teams_, state_.get_stage_no()+1);
 
-    const std::vector<map_location>& villages = map_.villages();
+    return *state_next;
+    /*const std::vector<map_location>& villages = map_.villages();
     const int total_village_number = villages.size();
     int own_village_number = 0;
     for(std::vector<map_location>::const_iterator v = villages.begin(); v != villages.end(); v++){
@@ -966,25 +1013,54 @@ static bool calc_decisions(lua_State *L, std::queue<stage_state> &states_, const
         if(side == owner){
             ++own_village_number;
         }
-        LOG_LUA<<*v<<'\t'<<side<<'\t'<<village_owner(*v)<<'\t'<<std::endl;
+        //LOG_LUA<<*v<<'\t'<<side<<'\t'<<village_owner(*v)<<'\t'<<std::endl;
     }
 http://devdocs.wesnoth.org/contexts_8cpp_source.html#1139
 
     const int tod_modifier = 2;//;
     const int total_turns = (map_.w()>map_.h() ? map_.w() : map_.h())/2;
-    int turns_remain = total_turns - 2;//get_turns();
+    int turns_remain = total_turns - 2;//get_turns();*/
 
-    double village_priority = (2*(total_village_number-own_village_number)*2/*village_gold()*/*turns_remain)/(1+exp(own_village_number+total_village_number/2+tod_modifier));
-    lua_pushnumber(L, 12);
+    //double village_priority = (2*(total_village_number-own_village_number)*2/*village_gold()*/*turns_remain)/(1+exp(own_village_number+total_village_number/2+tod_modifier));
+    //lua_pushnumber(L, 12);
 
     // 2 pushes
-    
-    return true;
 }
 
-static bool calc_optimal_policy(lua_State *L){
-    return true;
+std::string decision::describe()
+{
+    std::string name = "";
+
+    switch(decision_no_){
+        case 0:
+            name = "defensively";
+            break;
+        case 1:
+            name = "offensively";
+            break;
+        default:
+            break;
+    }
+
+    return name;
 }
+
+std::string decision::recommend_ca()
+{
+    return "attack";
+}
+
+double decision::get_gain()
+{
+    return gain_;
+}
+
+decision::~decision()
+{
+
+}
+
+// ------ Kevin_analyze end------
 
 static void generate_and_push_ai_table(lua_State* L, ai::engine_lua* engine) {
 	//push data table here

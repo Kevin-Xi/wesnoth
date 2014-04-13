@@ -32,6 +32,8 @@ class engine_lua;
 class lua_object_base;
 typedef boost::shared_ptr<lua_object_base> lua_object_ptr;
 
+class decision;
+
 /**
  * Proxy table for the AI context
  */
@@ -83,22 +85,47 @@ public:
 
 
 /**
- * Proxy class for calling AI action handlers defined in Lua.
+ * Record the state of stage.
  */
 class stage_state
 {
 private:
+    int own_side_;
     const unit_map units_;
     const gamemap map_; // Maybe don't need if we have team
     const std::vector<team> teams_;
     int stage_no_;   // Stage variable.
     double state_value_; // State variable.
+    decision& decision_;
 
 public:
-    stage_state(lua_State *L, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_, int stage_no_);
+    stage_state(int own_side_, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_, int stage_no_);
     int get_stage_no() const;
-    double get_state_value();
+    double get_state_value() const;
+    const decision get_decision();
     ~stage_state();
+};
+
+
+/**
+ * Represent decision.
+ */
+class decision
+{
+private:
+    int decision_no_; // Decision variable.
+    std::vector<int> recommend_ca_;
+    double gain_;  // Decision gain.
+
+public:
+    static const int total_decision = 2;
+
+    decision();
+    stage_state calc_decision(int decision_no_, stage_state &state_);
+    std::string describe();
+    std::string recommend_ca();
+    double get_gain();
+    ~decision();
 };
 
 }//of namespace ai
