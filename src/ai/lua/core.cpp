@@ -880,6 +880,8 @@ static void calc_decisions(int own_side_, std::queue<stage_state> &states_)
     const int total_stages = 3;
     int current_stage = 1;
 
+    // Pop one state from queue and calculate each decision,
+    // push the resulted states back to the queue.
     while (current_stage < total_stages){
         stage_state current_state = states_.front();
         states_.pop();
@@ -890,12 +892,8 @@ static void calc_decisions(int own_side_, std::queue<stage_state> &states_)
         }
 
         current_stage = states_.front().get_stage_no();
-        //LOG_LUA <<"current stage: "<<current_stage<<" size: "<<states_.size()<<std::endl;
+        LOG_LUA <<"current stage: "<<current_stage<<" size: "<<states_.size()<<std::endl;
     }
-
-
-    //LOG_LUA << "stage_state no: " << state.get_stage_no() << std::endl;
-    //int side = get_readonly_context(L).get_side();
 }
 
 
@@ -919,7 +917,7 @@ static void calc_optimal_policy(std::queue<stage_state> &states_){
     LOG_LUA << "Candidate actions recommended: " << optimal_decision.recommend_ca() << std::endl;
 }
 
-stage_state::stage_state(int own_side_, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_, int stage_no_):own_side_(own_side_), units_(units_), map_(map_), teams_(teams_), stage_no_(stage_no_), state_value_(0.0), decision_(*(new decision()))
+stage_state::stage_state(const int own_side_, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_, const int stage_no_):own_side_(own_side_), units_(units_), map_(map_), teams_(teams_), stage_no_(stage_no_), state_value_(0.0), decision_(*(new decision()))
 {
     const int total_team = teams_.size();   // check
     std::vector<double> state(total_team, 0.0);
@@ -970,6 +968,21 @@ stage_state::stage_state(int own_side_, const unit_map &units_, const gamemap &m
     LOG_LUA << "State constructed with variable " << state_value_ << std::endl;
 }
 
+const unit_map& stage_state::get_units() const
+{
+    return units_;
+}
+
+const gamemap& stage_state::get_map() const
+{
+    return map_;
+}
+
+const std::vector<team>& stage_state::get_teams() const
+{
+    return teams_;
+}
+
 int stage_state::get_stage_no() const
 {
     return stage_no_;
@@ -980,7 +993,7 @@ double stage_state::get_state_value() const
     return state_value_;
 }
 
-const decision stage_state::get_decision()
+const decision& stage_state::get_decision() const
 {
     return decision_;
 }
@@ -995,11 +1008,11 @@ decision::decision()
     //
 }
 
-stage_state decision::calc_decision(int own_side_, int decision_no_, stage_state &state_)
+const stage_state decision::calc_decision(const int own_side_, const int decision_no_, const stage_state &state_) const
 {
-    unit_map &units_ = *resources::units;
-    gamemap &map_ = *resources::game_map;
-    std::vector<team> &teams_ = *resources::teams;
+    const unit_map &units_ = state_.get_units();//*resources::units;
+    const gamemap &map_ = state_.get_map();//*resources::game_map;
+    const std::vector<team> &teams_ = state_.get_teams();//*resources::teams;
 
     stage_state *state_next = new stage_state(own_side_, units_, map_, teams_, state_.get_stage_no()+1);
 
@@ -1021,12 +1034,9 @@ http://devdocs.wesnoth.org/contexts_8cpp_source.html#1139
     int turns_remain = total_turns - 2;//get_turns();*/
 
     //double village_priority = (2*(total_village_number-own_village_number)*2/*village_gold()*/*turns_remain)/(1+exp(own_village_number+total_village_number/2+tod_modifier));
-    //lua_pushnumber(L, 12);
-
-    // 2 pushes
 }
 
-std::string decision::describe()
+const std::string decision::describe() const
 {
     std::string name = "";
 
@@ -1044,12 +1054,12 @@ std::string decision::describe()
     return name;
 }
 
-std::string decision::recommend_ca()
+const std::string decision::recommend_ca() const
 {
     return "attack";
 }
 
-double decision::get_gain()
+double decision::get_gain() const
 {
     return gain_;
 }

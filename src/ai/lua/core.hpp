@@ -16,9 +16,9 @@
 #define AI_LUA_CORE_HPP
 
 #include <boost/shared_ptr.hpp>
-#include "../../unit.hpp"  // (Kevin)
-#include "../../map.hpp"  // (Kevin)
-#include "../../team.hpp"  // (Kevin)
+#include "../../unit.hpp"
+#include "../../map.hpp"
+#include "../../team.hpp"
 
 struct lua_State;
 class LuaKernel;
@@ -33,6 +33,7 @@ class lua_object_base;
 typedef boost::shared_ptr<lua_object_base> lua_object_ptr;
 
 class decision;
+class stage_state;
 
 /**
  * Proxy table for the AI context
@@ -85,29 +86,6 @@ public:
 
 
 /**
- * Record the state of stage.
- */
-class stage_state
-{
-private:
-    int own_side_;
-    const unit_map units_;
-    const gamemap map_; // Maybe don't need if we have team
-    const std::vector<team> teams_;
-    int stage_no_;   // Stage variable.
-    double state_value_; // State variable.
-    decision& decision_;
-
-public:
-    stage_state(int own_side_, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_, int stage_no_);
-    int get_stage_no() const;
-    double get_state_value() const;
-    const decision get_decision();
-    ~stage_state();
-};
-
-
-/**
  * Represent decision.
  */
 class decision
@@ -121,11 +99,37 @@ public:
     static const int total_decision = 2;
 
     decision();
-    stage_state calc_decision(int own_side_, int decision_no_, stage_state &state_);
-    std::string describe();
-    std::string recommend_ca();
-    double get_gain();
+    const stage_state calc_decision(const int own_side_, const int decision_no_, const stage_state &state_) const;
+    const std::string describe() const;
+    const std::string recommend_ca() const;
+    double get_gain() const;
     ~decision();
+};
+
+
+/**
+ * Record the state of stage.
+ */
+class stage_state
+{
+private:
+    const int own_side_;
+    const unit_map units_;
+    const gamemap map_; // Maybe don't need if we have team
+    const std::vector<team> teams_;
+    const int stage_no_;   // Stage variable.
+    double state_value_; // State variable.
+    decision decision_;
+
+public:
+    stage_state(const int own_side_, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_, const int stage_no_);
+    const unit_map& get_units() const;
+    const gamemap& get_map() const;
+    const std::vector<team>& get_teams() const;
+    int get_stage_no() const;
+    double get_state_value() const;
+    const decision& get_decision() const;
+    ~stage_state();
 };
 
 }//of namespace ai
