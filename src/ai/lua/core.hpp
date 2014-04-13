@@ -98,8 +98,9 @@ private:
 public:
     static const int total_decision = 2;
 
-    decision();
-    const stage_state calc_decision(const int own_side_, const int decision_no_, const stage_state &state_) const;
+    decision(int decision_no_);
+    int get_decision_no() const;
+    const stage_state calc_decision(const int own_side_, const stage_state &state_) const;
     const std::string describe() const;
     const std::string recommend_ca() const;
     double get_gain() const;
@@ -131,6 +132,7 @@ public:
     int get_stage_no() const;
     double get_state_value() const;
     const decision& get_decision() const;
+    void set_decision(const decision& decision_);
     ~stage_state();
 };
 

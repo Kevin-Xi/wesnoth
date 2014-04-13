@@ -24,8 +24,9 @@
 
 #include <cassert>
 #include <cstring>
-#include <cmath>    // (Kevin)
-#include <queue>    // (Kevin)
+#include <cmath>
+#include <queue>
+#include <cstdlib>
 
 #include "core.hpp"
 #include "../../scripting/lua.hpp"
@@ -888,8 +889,11 @@ static void calc_decisions(int own_side_, std::queue<stage_state> &states_)
         states_.pop();
 
         for(int i = 0; i < decision::total_decision; ++i){
-            decision *current_decision = new decision();
-            states_.push(current_decision -> calc_decision(own_side_, i, current_state));
+            decision *current_decision = new decision(i);
+            if(current_state.get_decision().get_decision_no() == -1){
+                current_state.set_decision(*current_decision);
+            }
+            states_.push(current_decision -> calc_decision(own_side_, current_state));
         }
 
         current_stage = states_.front().get_stage_no();
@@ -914,11 +918,11 @@ static void calc_optimal_policy(std::queue<stage_state> &states_){
         }
     }
 
-    LOG_LUA << "The global optimal policy of this turn is play " << optimal_decision.describe()<< std::endl;
+    LOG_LUA << "The global optimal policy of this turn is to play " << optimal_decision.describe()<< std::endl;
     LOG_LUA << "Candidate actions recommended: " << optimal_decision.recommend_ca() << std::endl;
 }
 
-stage_state::stage_state(const int own_side_, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_, const int turn_no_, const int stage_no_):own_side_(own_side_), units_(units_), map_(map_), teams_(teams_), turn_no_(turn_no_), stage_no_(stage_no_), state_value_(0.0), decision_(*(new decision()))
+stage_state::stage_state(const int own_side_, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_, const int turn_no_, const int stage_no_) : own_side_(own_side_), units_(units_), map_(map_), teams_(teams_), turn_no_(turn_no_), stage_no_(stage_no_), state_value_(0.0), decision_(*(new decision(-1)))
 {
     const int total_team = teams_.size();   // check
     std::vector<double> state(total_team, 0.0);
@@ -1004,23 +1008,34 @@ const decision& stage_state::get_decision() const
     return decision_;
 }
 
+void stage_state::set_decision(const decision& decision_)
+{
+    this->decision_ = decision_;
+}
+
 stage_state::~stage_state()
 {
 
 }
 
-decision::decision()
+decision::decision(int i) : decision_no_(i)
 {
-    //
+
 }
 
-const stage_state decision::calc_decision(const int own_side_, const int decision_no_, const stage_state &state_) const
+int decision::get_decision_no() const
+{
+    return decision_no_;
+}
+
+const stage_state decision::calc_decision(const int own_side_, const stage_state &state_) const
 {
     // Execute CA based on state_ and get return state
     const unit_map &units_ = state_.get_units();
     const gamemap &map_ = state_.get_map();
     const std::vector<team> &teams_ = state_.get_teams();
 
+    // This part of code should be in village CA
     // Analyze villages, the idea based on 
     // https://docs.google.com/document/d/1tHMdXp5-yh4eNymOVk3gQxvCJ26DZtaC9_1xC6cGwmo/edit?usp=sharing
     const std::vector<map_location>& villages = map_.villages();
@@ -1050,8 +1065,21 @@ const stage_state decision::calc_decision(const int own_side_, const int decisio
 
     LOG_LUA << "village_priority: " << village_priority << std::endl;
 
+    // Execute attack CA for a stage to get the new state
+    // Since I have not implemented my own CA, it just do
+    // pseudo-attack to each unit to test if it will work.
+    unit_map *new_units_ = new unit_map(units_);
+    srand((unsigned int)decision_no_);
+
+    for(unit_map::iterator ui = new_units_->begin(); ui != new_units_->end(); ++ui){
+        ui->set_hitpoints(ui->hitpoints() * (rand()%10) / 10);
+    }
+
     // Construct new stage after execute CA
-    stage_state *state_next = new stage_state(own_side_, units_, map_, teams_, state_.get_turn_no()+2, state_.get_stage_no()+1);
+    stage_state *state_next = new stage_state(own_side_, *new_units_, map_, teams_, state_.get_turn_no()+2, state_.get_stage_no()+1);
+    if(state_.get_decision().get_decision_no() != -1){
+        state_next->set_decision(state_.get_decision());
+    }
 
     return *state_next;
 }
@@ -1062,10 +1090,10 @@ const std::string decision::describe() const
 
     switch(decision_no_){
         case 0:
-            name = "defensively";
+            name = "offensively";
             break;
         case 1:
-            name = "offensively";
+            name = "defensively";
             break;
         default:
             break;
