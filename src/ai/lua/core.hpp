@@ -100,7 +100,7 @@ public:
 
     decision(int decision_no_);
     int get_decision_no() const;
-    const stage_state calc_decision(const int own_side_, const stage_state &state_) const;
+    const stage_state calc_decision(lua_State *L, const int own_side_, const stage_state &state_) const;
     const std::string describe() const;
     const std::string recommend_ca() const;
     double get_gain() const;

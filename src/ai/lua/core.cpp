@@ -26,7 +26,6 @@
 #include <cstring>
 #include <cmath>
 #include <queue>
-#include <cstdlib>
 
 #include "core.hpp"
 #include "../../scripting/lua.hpp"
@@ -61,7 +60,7 @@ namespace ai {
 static void push_map_location(lua_State *L, const map_location& ml);
 static void push_attack_analysis(lua_State *L, attack_analysis&);
 
-static void calc_decisions(int own_side_, std::queue<stage_state> &states_);
+static void calc_decisions(lua_State *L, int own_side_, std::queue<stage_state> &states_);
 static void calc_optimal_policy(std::queue<stage_state> &states_);
 
 void lua_ai_context::init(lua_State *L)
@@ -865,7 +864,7 @@ static int cfun_ai_kevin_analyze(lua_State *L)
     states_.push(*stage_1);
 
     // Second calculate decisions based on current states.
-    calc_decisions(own_side_, states_);
+    calc_decisions(L, own_side_, states_);
 
     // Finally figure out the optimal policy for the total 
     // three stages.
@@ -875,7 +874,7 @@ static int cfun_ai_kevin_analyze(lua_State *L)
 	return 1;
 }
 
-static void calc_decisions(int own_side_, std::queue<stage_state> &states_)
+static void calc_decisions(lua_State *L, int own_side_, std::queue<stage_state> &states_)
 {
     // Assume the final stage of dynamic programming is two 
     // stages ahead, that is, consider three stages totally.
@@ -893,7 +892,7 @@ static void calc_decisions(int own_side_, std::queue<stage_state> &states_)
             if(current_state.get_decision().get_decision_no() == -1){
                 current_state.set_decision(*current_decision);
             }
-            states_.push(current_decision -> calc_decision(own_side_, current_state));
+            states_.push(current_decision -> calc_decision(L, own_side_, current_state));
         }
 
         current_stage = states_.front().get_stage_no();
@@ -1028,14 +1027,16 @@ int decision::get_decision_no() const
     return decision_no_;
 }
 
-const stage_state decision::calc_decision(const int own_side_, const stage_state &state_) const
+const stage_state decision::calc_decision(lua_State *L, const int own_side_, const stage_state &state_) const
 {
     // Execute CA based on state_ and get return state
     const unit_map &units_ = state_.get_units();
     const gamemap &map_ = state_.get_map();
     const std::vector<team> &teams_ = state_.get_teams();
 
-    // This part of code should be in village CA
+    // This part of code should be in village CA.
+    // Currently this method do not consider village,
+    // it only for comparing the value of village here.
     // Analyze villages, the idea based on 
     // https://docs.google.com/document/d/1tHMdXp5-yh4eNymOVk3gQxvCJ26DZtaC9_1xC6cGwmo/edit?usp=sharing
     const std::vector<map_location>& villages = map_.villages();
@@ -1068,11 +1069,57 @@ const stage_state decision::calc_decision(const int own_side_, const stage_state
     // Execute attack CA for a stage to get the new state
     // Since I have not implemented my own CA, it just do
     // pseudo-attack to each unit to test if it will work.
+    // Temporally use two times one turn as one stage, 
+    // because counter attack turn is almost the same code.
     unit_map *new_units_ = new unit_map(units_);
-    srand((unsigned int)decision_no_);
+    if(decision_no_ == 0){
+        std::map<map_location, pathfind::paths> own_possible_moves, enemy_possible_moves;
+        move_map own_srcdst, own_dstsrc, enemy_srcdst, enemy_dstsrc;
 
-    for(unit_map::iterator ui = new_units_->begin(); ui != new_units_->end(); ++ui){
-        ui->set_hitpoints(ui->hitpoints() * (rand()%10) / 10);
+        get_readonly_context(L).calculate_moves(units_, own_possible_moves, own_srcdst, own_dstsrc, false);
+        get_readonly_context(L).calculate_moves(units_, enemy_possible_moves, enemy_srcdst, enemy_dstsrc, true);
+
+        for(unit_map::iterator ui = new_units_->begin(); ui != new_units_->end(); ++ui){
+            if(teams_[own_side_-1].is_enemy(ui->side())){
+                map_location adjacent_tiles[6];
+                get_adjacent_tiles(ui->get_location(), adjacent_tiles);
+                double min_power_projection = 1000.0;
+                std::pair<map_location, map_location> best_movement;
+
+                for(int n = 0; n != 6; ++n){
+                    typedef move_map::const_iterator Itor;
+                    std::pair<Itor, Itor> range = own_dstsrc.equal_range(adjacent_tiles[n]);
+
+                    while(range.first != range.second){
+                        const map_location& dst = range.first->first;
+                        double power_here = get_readonly_context(L).power_projection(dst, enemy_dstsrc);
+
+                        if(power_here < min_power_projection){
+                            min_power_projection = power_here;
+                            best_movement = *range.first;
+                        }
+
+                        ++range.first;
+                    }
+                }
+
+                map_location from = best_movement.second;
+                map_location to = best_movement.first;
+                map_location target_loc = ui->get_location();
+                LOG_LUA << "Simulation: From " << from << " to " << to << " attack " << target_loc<<std::endl;
+
+                if(from != to){
+                    int hurt = 2;   // I am lazy here.
+                    ui->set_hitpoints(ui->hitpoints() - 2*hurt);
+                    unit_map::iterator attacker = new_units_->find(from);
+                    attacker->set_hitpoints(attacker->hitpoints() - 2*hurt);
+                    attacker->set_location(to);
+                }
+            }
+        }
+    } else {
+        // Currently do nothing here, should make some defensive move
+        // such as retreat.
     }
 
     // Construct new stage after execute CA
