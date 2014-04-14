@@ -15,6 +15,9 @@ Version 1.13.0-dev:
    * Some internal reorganization of Micro AI code to facilitate customizing
      MAIs for UMC and adding functionality from other versions of Wesnoth
  * Campaigns:
+   * Eastern Invasion:
+     * In 'Captured', stolen gold won't be mentioned if the player had no
+       carryover gold.
    * The Hammer of Thursagan:
      * Fixed missing objective in 'The Court of Karrag'.
      * Rebalanced scenarios 'Invaders', Mages and Drakes' and 'Fear'.
@@ -83,6 +86,7 @@ Version 1.13.0-dev:
    * Fix bug 21459 by making dropped sides default to idle.
    * Fix bug 21882 by introducing "fight_on_without_leader" boolean attribute
      of [side] tags and refactoring check_victory to use this.
+   * Changed: Don't use the random generator for units with no names.
 
 Version 1.11.11:
  * Add-ons server:

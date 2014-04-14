@@ -30,8 +30,6 @@ class synced_context
 {
 public:
 	enum syced_state {UNSYNCED, SYNCED, LOCAL_CHOICE};
-
-	typedef boost::function1<void, config&> ftype;
 	/**
 		
 		Sets the context to 'synced', initialises random context, and calls the given function.
@@ -47,16 +45,6 @@ public:
 
 		redoing does normaly not take place in a synced context, because we saved the dependent=true replaycommands in the replaystack data. 
 			also there are no events of similar fired when redoing an action (in most cases).
-		
-		TODO: implement the optional "Deterministic Mode" for MP to lower network traffic.
-		
-		TODO: move_unit currently ignores when the unit moves further than it can, 
-			it would be good to give an oos in this case.
-		
-		TODO: undos are currently recorded AFTER the action takes place, 
-			that means you cannot disallow undoing an action during it's execution by calling undo_stack->clear();
-			it would make things easier if that was possible.
-		
 		
 		@param use_undo this parameter is used to ignore undos during an ai move to optimize.
 		@param store_in_replay only true if called by do_replay_handle
@@ -99,7 +87,7 @@ public:
 	/*
 		returns a rng_deterministic if in determinsic mode otherwise a rng_synced.
 	*/
-	static boost::shared_ptr<random_new::rng> get_rng_for(const std::string& commandname);
+	static boost::shared_ptr<random_new::rng> get_rng_for_action();
 	/*
 		returns is_simultaneously_
 	*/
@@ -108,6 +96,10 @@ public:
 		sets is_simultaneously_ = false, called when entering the synced context.
 	*/
 	static void reset_is_simultaneously();
+	/*
+		whether there were recently no methods called that prevent undoing.
+	*/
+	static bool can_undo();
 private:
 	/*
 		similar to get_user_choice but asks the server instead of a user.
@@ -136,7 +128,6 @@ private:
 class set_scontext_synced
 {
 public:
-	set_scontext_synced(const std::string& commanname);
 	set_scontext_synced();
 	/*
 		use this if you have multiple synced_context but only one replay entry.
