@@ -87,6 +87,12 @@ Version 1.13.0-dev:
    * Fix bug 21882 by introducing "fight_on_without_leader" boolean attribute
      of [side] tags and refactoring check_victory to use this.
    * Changed: Don't use the random generator for units with no names.
+   * Fix bug #21910: code for game is ready bell is corrected, simplified, and
+     moved to mp_connect::process_network_data.
+   * Deliver desktop notifications in tandem with "game is ready" bell and 
+     also the "game has begun" bell.
+   * Disable notifications preference now works in all platforms, not just DBUS.
+   * Fix bug in which blindfold could cause OOS.
 
 Version 1.11.11:
  * Add-ons server:
