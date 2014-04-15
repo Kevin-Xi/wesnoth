@@ -1108,11 +1108,22 @@ const stage_state decision::calc_decision(lua_State *L, const int own_side_, con
                 map_location target_loc = ui->get_location();
                 LOG_LUA << "Simulation: From " << from << " to " << to << " attack " << target_loc<<std::endl;
 
-                if(from != to){
-                    int hurt = 2;   // I am lazy here.
-                    ui->set_hitpoints(ui->hitpoints() - 2*hurt);
+                if(from != to){   // I am lazy here.
                     unit_map::iterator attacker = new_units_->find(from);
-                    attacker->set_hitpoints(attacker->hitpoints() - 2*hurt);
+
+                    const std::vector<attack_type> &attacks_o = attacker-> attacks();
+                    const attack_type &a0_o = attacks_o[0];
+                    int def_modifier_o = attacker->defense_modifier(map_.get_terrain(to));
+                    int hurt_e = a0_o.damage()*a0_o.num_attacks()*(double)def_modifier_o/100;
+
+                    const std::vector<attack_type> &attacks_e = ui-> attacks();
+                    const attack_type &a0_e = attacks_e[0];
+                    int def_modifier_e = ui->defense_modifier(map_.get_terrain(target_loc));
+                    int hurt_o = a0_e.damage()*a0_e.num_attacks()*(double)def_modifier_e/100;
+
+                    LOG_LUA << "hurt: " << hurt_e << "-" << hurt_o << std::endl;
+                    ui->set_hitpoints(ui->hitpoints() - 2*hurt_e);
+                    attacker->set_hitpoints(attacker->hitpoints() - 2*hurt_o);
                     attacker->set_location(to);
                 }
             }
