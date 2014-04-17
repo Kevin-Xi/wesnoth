@@ -24,8 +24,8 @@ Version 1.13.0-dev:
  * C++ Engine:
    * Purge "human_ai" controller type. This is a fixup of bugfix #18829 below.
  * Language and i18n:
-   * Updated translations: German, Greek, Hungarian, Italian, Scottish Gaelic,
-     Slovak
+   * Updated translations: Czech, French, German, Greek, Hungarian, Italian,
+     Scottish Gaelic, Slovak
  * Lua API:
    * Fix bug #21761: wesnoth.synchronize_choice will now give a warning when
      the table returned by the user-specified function is not completely valid,
@@ -36,6 +36,7 @@ Version 1.13.0-dev:
    * Changed sound timings for Khalifate melee attacks
    * New chill tempest animation for Lich/Ancient Lich
    * Add 'elemental' trait to mudcrawler line
+   * Fix sound timings for drake fire animation macros
  * User interface:
    * Made orb and minmap colors configurable by the game preferences.
  * WML engine:
@@ -93,6 +94,12 @@ Version 1.13.0-dev:
      also the "game has begun" bell.
    * Disable notifications preference now works in all platforms, not just DBUS.
    * Fix bug in which blindfold could cause OOS.
+   * Fix bug #21914: allow drake walking corpse variation to move on unwalkable
+   * Fix unnecessary "Mandatory WML Child not found" error when replay file 
+     doesn't have a [carryover_sides_start] tag
+   * Server now generates PR 121 compliant replay files.
+   * Fix bug #21025: replay controller doesn't execute play_next_side properly
+   * Fix bug #21916: ready blocked at inappropriate times
 
 Version 1.11.11:
  * Add-ons server:
