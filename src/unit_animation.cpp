@@ -526,7 +526,7 @@ void unit_animation::fill_initial_animations( std::vector<unit_animation> & anim
 
 		animations.push_back(*itor);
 		animations.back().event_ = utils::split("movement");
-		animations.back().unit_anim_.override(0,6800,particule::NO_CYCLE,"","",0,"0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,0~1:200,",lexical_cast<std::string>(display::LAYER_UNIT_MOVE_DEFAULT-display::LAYER_UNIT_FIRST));
+		animations.back().unit_anim_.override(0,200,particule::NO_CYCLE,"","",0,"0~1:200",lexical_cast<std::string>(display::LAYER_UNIT_MOVE_DEFAULT-display::LAYER_UNIT_FIRST));
 
 		animations.push_back(*itor);
 		animations.back().event_ = utils::split("defend");
@@ -633,6 +633,15 @@ void unit_animation::add_anims( std::vector<unit_animation> & animations, const 
 		config anim = ab.merge();
 		anim["apply_to"] = "standing";
 		anim["cycles"] = "true";
+		// add cycles to all frames within a standing animation block
+		BOOST_FOREACH(config::all_children_iterator ci, ab.children)
+		{
+			std::string sub_frame_name = ci->key;
+			size_t pos = sub_frame_name.find("_frame");
+			if (pos != std::string::npos) {
+				anim[sub_frame_name.substr(0,pos)+"_cycles"] = "true";
+			}
+		}
 		if (anim["layer"].empty()) anim["layer"] = default_layer;
 		if (anim["offscreen"].empty()) anim["offscreen"] = false;
 		animations.push_back(unit_animation(anim));
@@ -642,7 +651,15 @@ void unit_animation::add_anims( std::vector<unit_animation> & animations, const 
 	{
 		config anim = ab.merge();
 		anim["apply_to"] = "default";
-		anim["cycles"] = "false";
+		anim["cycles"] = "true";
+		BOOST_FOREACH(config::all_children_iterator ci, ab.children)
+		{
+			std::string sub_frame_name = ci->key;
+			size_t pos = sub_frame_name.find("_frame");
+			if (pos != std::string::npos) {
+				anim[sub_frame_name.substr(0,pos)+"_cycles"] = "true";
+			}
+		}
 		if (anim["layer"].empty()) anim["layer"] = default_layer;
 		if (anim["offscreen"].empty()) anim["offscreen"] = false;
 		animations.push_back(unit_animation(anim));
