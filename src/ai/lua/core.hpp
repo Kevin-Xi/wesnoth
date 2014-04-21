@@ -85,26 +85,35 @@ public:
 };
 
 
+// Main changes of prototype_new are available in commit message
+
 /**
  * Represent decision.
  */
 class decision
 {
+    friend std::ostream& operator<<(std::ostream&, const decision&);
+
 private:
+    typedef std::vector<int> ca_container;
     int decision_no_; // Decision variable.
-    std::vector<int> recommend_ca_;
-    double gain_;  // Decision gain.
+    ca_container recommend_ca_;
 
 public:
-    static const int total_decision = 2;
+    static const int total_decisions = 2; // We have two kinds of decisions now.
 
-    decision(int decision_no_);
-    int get_decision_no() const;
-    const stage_state calc_decision(lua_State *L, const int own_side_, const stage_state &state_) const;
-    const std::string describe() const;
-    const std::string recommend_ca() const;
-    double get_gain() const;
+    decision(int decision_no_) : decision_no_(decision_no_)
+    {
+    }
+
     ~decision();
+
+    int get_decision_no() const { return decision_no_; }
+    decision& set_decision_no(int decision_no_) { this->decision_no_ = decision_no_; return *this; }
+    const ca_container& get_recommend_ca() const { return recommend_ca_; }
+    decision& set_recommend_ca(const ca_container &recommend_ca_) { this->recommend_ca_ = recommend_ca_; return *this; }
+    bool is_valid() const { return (decision_no_ >= 0 && decision_no_ < total_decisions); }
+    void add_recommend_ca(int ca_no_) { recommend_ca_.push_back(ca_no_); }
 };
 
 
@@ -115,25 +124,30 @@ class stage_state
 {
 private:
     const int own_side_;
-    const unit_map units_;
-    const gamemap map_; // Maybe don't need if we have team
-    const std::vector<team> teams_;
     const int turn_no_;
     const int stage_no_;   // Stage variable.
     double state_value_; // State variable.
+
+    const unit_map units_;
+    const gamemap map_; // Maybe don't need if we have team
+    const std::vector<team> teams_;
+
     decision decision_;
 
 public:
-    stage_state(const int own_side_, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_, const int turn_no_, const int stage_no_);
-    const unit_map& get_units() const;
-    const gamemap& get_map() const;
-    const std::vector<team>& get_teams() const;
-    int get_turn_no() const;
-    int get_stage_no() const;
-    double get_state_value() const;
-    const decision& get_decision() const;
-    void set_decision(const decision& decision_);
+    stage_state(const int own_side_, const int turn_no_, const int stage_no_, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_);
     ~stage_state();
+
+    int get_turn_no() const { return turn_no_; }
+    int get_stage_no() const { return stage_no_; }
+    double get_state_value() const { return state_value_; }
+
+    const unit_map& get_units() const { return units_; }
+    const gamemap& get_map() const { return map_; }
+    const std::vector<team>& get_teams() const { return teams_; }
+
+    const decision& get_decision() const { return decision_; }
+    void set_decision(int decision_no_, const std::vector<int> &recommend_ca_) { decision_.set_decision_no(decision_no_).set_recommend_ca(recommend_ca_); }
 };
 
 }//of namespace ai

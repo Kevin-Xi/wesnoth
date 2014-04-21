@@ -62,6 +62,7 @@ static void push_attack_analysis(lua_State *L, attack_analysis&);
 
 static void calc_decisions(lua_State *L, int own_side_, std::queue<stage_state> &states_);
 static void calc_optimal_policy(std::queue<stage_state> &states_);
+const stage_state calc_new_stage(lua_State *L, const int own_side_, const int decision_no_, const stage_state &state_);
 
 void lua_ai_context::init(lua_State *L)
 {
@@ -853,14 +854,14 @@ static int cfun_ai_kevin_analyze(lua_State *L)
 
     LOG_LUA << "------Kevin_analyze on side " << own_side_ << "------" << std::endl;
 
-    std::queue<stage_state> states_;
+    std::queue<stage_state> states_;    // How about vector? The efficiency is good and can contains intermediate results.
 
     // Utilizing dynamic programming to find optimal policy
     // One stage contains two turns, start from AI turn
     // and end when the following enemy's turn finish.
 
     // First calculate states of both sides.
-    stage_state *stage_1 = new stage_state(own_side_, *resources::units, *resources::game_map, *resources::teams, resources::tod_manager->turn(), 1);
+    boost::shared_ptr<stage_state> stage_1(new stage_state(own_side_, resources::tod_manager->turn(), 1, *resources::units, *resources::game_map, *resources::teams));
     states_.push(*stage_1);
 
     // Second calculate decisions based on current states.
@@ -887,12 +888,8 @@ static void calc_decisions(lua_State *L, int own_side_, std::queue<stage_state> 
         stage_state current_state = states_.front();
         states_.pop();
 
-        for(int i = 0; i < decision::total_decision; ++i){
-            decision *current_decision = new decision(i);
-            if(current_state.get_decision().get_decision_no() == -1){
-                current_state.set_decision(*current_decision);
-            }
-            states_.push(current_decision -> calc_decision(L, own_side_, current_state));
+        for(int i = 0; i != decision::total_decisions; ++i){
+            states_.push(calc_new_stage(L, own_side_, i, current_state));
         }
 
         current_stage = states_.front().get_stage_no();
@@ -901,7 +898,8 @@ static void calc_decisions(lua_State *L, int own_side_, std::queue<stage_state> 
 }
 
 
-static void calc_optimal_policy(std::queue<stage_state> &states_){
+static void calc_optimal_policy(std::queue<stage_state> &states_)
+{
     // Find the optimal policy, by find the maximum state variable
     // of the final stage.
     
@@ -917,118 +915,12 @@ static void calc_optimal_policy(std::queue<stage_state> &states_){
         }
     }
 
-    LOG_LUA << "The global optimal policy of this turn is to play " << optimal_decision.describe()<< std::endl;
-    LOG_LUA << "Candidate actions recommended: " << optimal_decision.recommend_ca() << std::endl;
+    LOG_LUA << optimal_decision << std::endl;
 }
 
-stage_state::stage_state(const int own_side_, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_, const int turn_no_, const int stage_no_) : own_side_(own_side_), units_(units_), map_(map_), teams_(teams_), turn_no_(turn_no_), stage_no_(stage_no_), state_value_(0.0), decision_(*(new decision(-1)))
+const stage_state calc_new_stage(lua_State *L, const int own_side_, const int decision_no_, const stage_state &state_)
 {
-    const int total_team = teams_.size();   // check
-    std::vector<double> state(total_team, 0.0);
-    std::vector<int> total_level(total_team, 0);
-
-    // Sum up the units' value.
-    for(unit_map::const_unit_iterator ui = units_.begin(); ui != units_.end(); ++ui) {
-        int current_side = ui->side() - 1;
-
-        double unit_value = (double)ui->hitpoints()/(double)ui->max_hitpoints()*(double)ui->cost();
-        LOG_LUA << "side " << current_side+1 << " unit " << ui->type_name() << "'s value is " << unit_value << std::endl;
-        state[current_side] += unit_value;
-        total_level[current_side] += ui->level();
-    }
-
     
-    const int total_stages = 3; // Move into ctor?
-    const int turn_left = (total_stages - stage_no_ + 1) * 2;
-    std::vector<int> upkeep_per_turn(total_team, 0);
-    std::vector<int> income_per_turn(total_team, 0);
-    std::vector<double> gold(total_team, 0.0);
-
-    // Add the gold that current have and that intend to 
-    // get as income in future totally(subtract the upkeep), 
-    // for each team.
-    for(std::vector<team>::const_iterator ti = teams_.begin(); ti != teams_.end(); ++ti) {
-        int current_side = ti->side() - 1;
-        upkeep_per_turn[current_side] = total_level[current_side]>ti->support() ? total_level[current_side]-ti->support() : 0;
-        income_per_turn[current_side] = ti->total_income() - upkeep_per_turn[current_side];
-        // The further, the rougher. So drop 0.1 weight for each turn.
-        gold[current_side] = ti->gold() + income_per_turn[current_side] * (1+(1-0.1*(double)(turn_left-1)))*turn_left/2;
-        state[current_side] += gold[current_side];
-        
-        LOG_LUA << "side " << current_side+1 << " will totally get " << gold[current_side] << " gold." << std::endl;
-    }
-
-
-    for(std::vector<team>::const_iterator ti = teams_.begin(); ti != teams_.end(); ++ti) {
-        int current_side = ti->side() - 1;
-        LOG_LUA << "side " << current_side+1 << "'s state: " << state[current_side] << std::endl;
-        if(ti->is_enemy(own_side_)){ // 'is_enemy()' based on 1.
-            state_value_ -= state[current_side];
-        } else {
-            state_value_ += state[current_side];
-        }
-    }
-
-    LOG_LUA << "State constructed with variable " << state_value_ << std::endl;
-}
-
-const unit_map& stage_state::get_units() const
-{
-    return units_;
-}
-
-const gamemap& stage_state::get_map() const
-{
-    return map_;
-}
-
-const std::vector<team>& stage_state::get_teams() const
-{
-    return teams_;
-}
-
-int stage_state::get_turn_no() const
-{
-    return turn_no_;
-}
-
-int stage_state::get_stage_no() const
-{
-    return stage_no_;
-}
-
-double stage_state::get_state_value() const
-{
-    return state_value_;
-}
-
-const decision& stage_state::get_decision() const
-{
-    return decision_;
-}
-
-void stage_state::set_decision(const decision& decision_)
-{
-    this->decision_ = decision_;
-}
-
-stage_state::~stage_state()
-{
-
-}
-
-decision::decision(int i) : decision_no_(i)
-{
-
-}
-
-int decision::get_decision_no() const
-{
-    return decision_no_;
-}
-
-const stage_state decision::calc_decision(lua_State *L, const int own_side_, const stage_state &state_) const
-{
     // Execute CA based on state_ and get return state
     const unit_map &units_ = state_.get_units();
     const gamemap &map_ = state_.get_map();
@@ -1064,14 +956,16 @@ const stage_state decision::calc_decision(lua_State *L, const int own_side_, con
     DBG_LUA << "divide " << (1+exp(own_village_number+total_village_number/2+tod_modifier)) << std::endl;
     double village_priority = (2*(total_village_number-own_village_number)*teams_[own_side_-1].village_gold()*turns_remain)/(1+exp((own_village_number+tod_modifier)/5));
 
-    LOG_LUA << "village_priority: " << village_priority << std::endl;
+    //LOG_LUA << "village_priority: " << village_priority << std::endl;
 
     // Execute attack CA for a stage to get the new state
     // Since I have not implemented my own CA, it just do
     // pseudo-attack to each unit to test if it will work.
     // Temporally use two times one turn as one stage, 
     // because counter attack turn is almost the same code.
-    unit_map *new_units_ = new unit_map(units_);
+    boost::shared_ptr<unit_map> new_units_(new unit_map(units_));
+    std::vector<int> recommend_ca_;
+
     if(decision_no_ == 0){
         std::map<map_location, pathfind::paths> own_possible_moves, enemy_possible_moves;
         move_map own_srcdst, own_dstsrc, enemy_srcdst, enemy_dstsrc;
@@ -1108,71 +1002,140 @@ const stage_state decision::calc_decision(lua_State *L, const int own_side_, con
                 map_location target_loc = ui->get_location();
                 LOG_LUA << "Simulation: From " << from << " to " << to << " attack " << target_loc<<std::endl;
 
-                if(from != to){   // I am lazy here.
-                    unit_map::iterator attacker = new_units_->find(from);
+                // I am lazy here.
+                unit_map::iterator attacker = new_units_->find(from);
 
-                    const std::vector<attack_type> &attacks_o = attacker-> attacks();
-                    const attack_type &a0_o = attacks_o[0];
-                    int def_modifier_o = attacker->defense_modifier(map_.get_terrain(to));
-                    int hurt_e = a0_o.damage()*a0_o.num_attacks()*(double)def_modifier_o/100;
+                const std::vector<attack_type> &attacks_o = attacker-> attacks();
+                const attack_type &a0_o = attacks_o[0];
+                int def_modifier_o = attacker->defense_modifier(map_.get_terrain(to));
+                int hurt_e = a0_o.damage()*a0_o.num_attacks()*(double)def_modifier_o/100;
 
-                    const std::vector<attack_type> &attacks_e = ui-> attacks();
-                    const attack_type &a0_e = attacks_e[0];
-                    int def_modifier_e = ui->defense_modifier(map_.get_terrain(target_loc));
-                    int hurt_o = a0_e.damage()*a0_e.num_attacks()*(double)def_modifier_e/100;
+                const std::vector<attack_type> &attacks_e = ui-> attacks();
+                const attack_type &a0_e = attacks_e[0];
+                int def_modifier_e = ui->defense_modifier(map_.get_terrain(target_loc));
+                int hurt_o = a0_e.damage()*a0_e.num_attacks()*(double)def_modifier_e/100;
 
-                    LOG_LUA << "hurt: " << hurt_e << "-" << hurt_o << std::endl;
-                    ui->set_hitpoints(ui->hitpoints() - 2*hurt_e);
-                    attacker->set_hitpoints(attacker->hitpoints() - 2*hurt_o);
-                    attacker->set_location(to);
-                }
+                LOG_LUA << "\thurt: " << hurt_e << "-" << hurt_o << std::endl;
+                ui->set_hitpoints(ui->hitpoints() - 2*hurt_e);
+                attacker->set_hitpoints(attacker->hitpoints() - 2*hurt_o);
+                attacker->set_location(to);
             }
         }
+        // The same decision may have different recommended CAs
+        // under different situation.
+        recommend_ca_.push_back(0);
+        recommend_ca_.push_back(1);
     } else {
+        recommend_ca_.push_back(2);
         // Currently do nothing here, should make some defensive move
         // such as retreat.
     }
 
     // Construct new stage after execute CA
-    stage_state *state_next = new stage_state(own_side_, *new_units_, map_, teams_, state_.get_turn_no()+2, state_.get_stage_no()+1);
-    if(state_.get_decision().get_decision_no() != -1){
-        state_next->set_decision(state_.get_decision());
+    boost::shared_ptr<stage_state> state_next(new stage_state(own_side_, state_.get_turn_no()+2, state_.get_stage_no()+1, *new_units_, map_, teams_));
+    const decision &decision_ = state_.get_decision();
+    if(decision_.is_valid()){
+        state_next->set_decision(decision_.get_decision_no(), decision_.get_recommend_ca());
+    } else {
+        state_next->set_decision(decision_no_, recommend_ca_);
     }
 
     return *state_next;
 }
 
-const std::string decision::describe() const
+// Implement class stage_state.
+stage_state::stage_state(const int own_side_, const int turn_no_, const int stage_no_, const unit_map &units_, const gamemap &map_, const std::vector<team> &teams_) :
+    own_side_(own_side_),
+    turn_no_(turn_no_),
+    stage_no_(stage_no_),
+    state_value_(0.0),
+    units_(units_),
+    map_(map_),
+    teams_(teams_),
+    decision_(-1)
 {
-    std::string name = "";
+    const int total_team = teams_.size();   // check
+    std::vector<double> state(total_team, 0.0);
+    std::vector<int> total_level(total_team, 0);
 
-    switch(decision_no_){
+    // Sum up the units' value.
+    for(unit_map::const_unit_iterator ui = units_.begin(); ui != units_.end(); ++ui) {
+        int current_side = ui->side() - 1;
+
+        double unit_value = (double)ui->hitpoints()/(double)ui->max_hitpoints()*(double)ui->cost();
+        LOG_LUA << "\tside " << current_side+1 << " unit " << ui->type_name() << "'s value is " << unit_value << std::endl;
+        state[current_side] += unit_value;
+        total_level[current_side] += ui->level();
+    }
+
+    
+    const int total_stages = 3; // Move into ctor?
+    const int turn_left = (total_stages - stage_no_ + 1) * 2;
+    std::vector<int> upkeep_per_turn(total_team, 0);
+    std::vector<int> income_per_turn(total_team, 0);
+    std::vector<double> gold(total_team, 0.0);
+
+    // Add the gold that current have and that intend to 
+    // get as income in future totally(subtract the upkeep), 
+    // for each team.
+    for(std::vector<team>::const_iterator ti = teams_.begin(); ti != teams_.end(); ++ti) {
+        int current_side = ti->side() - 1;
+        upkeep_per_turn[current_side] = total_level[current_side]>ti->support() ? total_level[current_side]-ti->support() : 0;
+        income_per_turn[current_side] = ti->total_income() - upkeep_per_turn[current_side];
+        // The further, the rougher. So drop 0.1 weight for each turn.
+        gold[current_side] = ti->gold() + income_per_turn[current_side] * (1+(1-0.1*(double)(turn_left-1)))*turn_left/2;
+        state[current_side] += gold[current_side];
+        
+        LOG_LUA << "\tside " << current_side+1 << " will totally get " << gold[current_side] << " gold." << std::endl;
+    }
+
+
+    for(std::vector<team>::const_iterator ti = teams_.begin(); ti != teams_.end(); ++ti) {
+        int current_side = ti->side() - 1;
+        LOG_LUA << "\tside " << current_side+1 << "'s state: " << state[current_side] << std::endl;
+        if(ti->is_enemy(own_side_)){ // 'is_enemy()' based on 1.
+            state_value_ -= state[current_side];
+        } else {
+            state_value_ += state[current_side];
+        }
+    }
+
+    LOG_LUA << "State constructed with variable " << state_value_ << std::endl;
+}
+
+stage_state::~stage_state()
+{
+}
+
+// Implement class decision and overload operator<<.
+decision::~decision()
+{
+}
+
+std::ostream& operator<<(std::ostream &output, const decision &decision_)
+{
+    std::string policy = "";
+
+    switch(decision_.decision_no_){
         case 0:
-            name = "offensively";
+            policy = "offensively";
             break;
         case 1:
-            name = "defensively";
+            policy = "defensively";
             break;
         default:
+            policy = "unknown";
             break;
     }
 
-    return name;
-}
+    output << "The global optimal policy of this turn is to play "
+        << policy << std::endl << "Candidate actions recommended:\n";
 
-const std::string decision::recommend_ca() const
-{
-    return "attack";
-}
+    for(std::vector<int>::const_iterator i = decision_.recommend_ca_.begin(); i != decision_.recommend_ca_.end(); ++i){
+        output << *i << std::endl;  // The elements of recommend_ca_ may finally become a new class.
+    }
 
-double decision::get_gain() const
-{
-    return gain_;
-}
-
-decision::~decision()
-{
-
+    return output;
 }
 
 // ------ Kevin_analyze end------
