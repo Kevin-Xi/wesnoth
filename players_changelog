@@ -9,13 +9,14 @@ Version 1.13.0-dev:
 
  * Language and i18n:
    * Updated translations: Czech, French, German, Greek, Hungarian, Italian,
-     Scottish Gaelic, Slovak.
+     Lithuanian, Scottish Gaelic, Slovak.
 
  * Units:
    * Increased the experience requirement for the Rami from 32 to 39.
    * Increased the experience requirement for the Saree from 56 to 64.
 
  * User interface:
+   * Classic Theme which restores the 1.10 UI.
    * Made orb and minmap colors configurable by the game preferences.
 
  * Miscellaneous and bug fixes:
@@ -35,6 +36,10 @@ Version 1.13.0-dev:
    * The replay viewer now proceeds through sides with empty controllers when
      using the "play_side" button, thus matching the behavior of the rest of
      wesnoth. Bug fix #21025.
+   * Fix bug stopping drag+drop for unit movements
+   * Revert premoved units selection to Wesnoth 1.10 behavior (#21448)
+   * Fix unit move continuation if enemy discovered (#21372)
+   * Support for total conversions, so called "cores". 
 
 Version 1.11.11:
  * Campaigns:

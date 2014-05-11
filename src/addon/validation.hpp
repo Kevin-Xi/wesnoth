@@ -40,6 +40,7 @@ extern const unsigned short default_campaignd_port;
  */
 enum ADDON_TYPE {
 	ADDON_UNKNOWN,		/**< a.k.a. anything. */
+	ADDON_CORE,			/**< Total Conversion Core. */
 	ADDON_SP_CAMPAIGN,	/**< Single-player campaign. */
 	ADDON_SP_SCENARIO,	/**< Single-player scenario. */
 	ADDON_SP_MP_CAMPAIGN, /**< Hybrid campaign. */

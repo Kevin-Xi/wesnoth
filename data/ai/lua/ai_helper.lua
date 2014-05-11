@@ -45,14 +45,6 @@ function ai_helper.done_eval_messages(start_time, ca_name)
     if ai_helper.print_eval() then
         ai_helper.print_ts_delta(start_time, '       - Done evaluating ' .. ca_name .. ':')
     end
-
-    if (dt >= 10) then
-        W.message{
-            speaker = 'narrator',
-            caption = 'Evaluation of candidate action ' .. ca_name .. ' took ' .. dt .. ' seconds',
-            message = 'This took a really long time (which it should not). If you can, would you mind sending us a screen grab of this situation?  Thanks!'
-        }
-    end
 end
 
 function ai_helper.clear_labels()
@@ -143,7 +135,7 @@ function ai_helper.checked_attack(ai, attacker, defender, weapon)
     local check = ai.check_attack(attacker, defender, weapon)
 
     if (not check.ok) then
-        ai_helper.checked_action_error('ai.attack', check.status)
+        ai_helper.checked_action_error('ai.attack from ' .. attacker.x .. ',' .. attacker.y .. ' to ' .. defender.x .. ',' .. defender.y, check.status)
         return
     end
 
@@ -159,7 +151,7 @@ function ai_helper.checked_move_core(ai, unit, x, y, move_type)
         -- E_AMBUSHED = 2005
         -- E_NOT_REACHED_DESTINATION = 2007
         if (check.status ~= 2001) and (check.status ~= 2005) and (check.status ~= 2007) then
-            ai_helper.checked_action_error(move_type, check.status)
+            ai_helper.checked_action_error(move_type .. ' from ' .. unit.x .. ',' .. unit.y .. ' to ' .. x .. ',' .. y, check.status)
             return
         end
     end
@@ -183,7 +175,7 @@ function ai_helper.checked_recruit(ai, unit_type, x, y)
     local check = ai.check_recruit(unit_type, x, y)
 
     if (not check.ok) then
-        ai_helper.checked_action_error('ai.recruit', check.status)
+        ai_helper.checked_action_error('ai.recruit of ' .. unit_type, check.status)
         return
     end
 
@@ -194,7 +186,7 @@ function ai_helper.checked_stopunit_all(ai, unit)
     local check = ai.check_stopunit(unit)
 
     if (not check.ok) then
-        ai_helper.checked_action_error('ai.stopunit_all', check.status)
+        ai_helper.checked_action_error('ai.stopunit_all of ' .. unit.x .. ',' .. unit.y, check.status)
         return
     end
 
@@ -205,7 +197,7 @@ function ai_helper.checked_stopunit_attacks(ai, unit)
     local check = ai.check_stopunit(unit)
 
     if (not check.ok) then
-        ai_helper.checked_action_error('ai.stopunit_attacks', check.status)
+        ai_helper.checked_action_error('ai.stopunit_attacks of ' .. unit.x .. ',' .. unit.y, check.status)
         return
     end
 
@@ -216,7 +208,7 @@ function ai_helper.checked_stopunit_moves(ai, unit)
     local check = ai.check_stopunit(unit)
 
     if (not check.ok) then
-        ai_helper.checked_action_error('ai.stopunit_moves', check.status)
+        ai_helper.checked_action_error('ai.stopunit_moves of ' .. unit.x .. ',' .. unit.y, check.status)
         return
     end
 
@@ -717,22 +709,14 @@ end
 function ai_helper.get_live_units(filter)
     -- Same as wesnoth.get_units(), except that it only returns non-petrified units
 
-    filter = filter or {}
+    local all_units = wesnoth.get_units(filter)
 
-    -- So that @filter in calling function is not modified (if it's a variable):
-    local live_filter = ai_helper.table_copy(filter)
+    local units = {}
+    for _,unit in ipairs(all_units) do
+        if (not unit.status.petrified) then table.insert(units, unit) end
+    end
 
-    local filter_not_petrified = { "not", {
-        { "filter_wml", {
-            { "status", { petrified = "yes" } }
-        } }
-    } }
-
-    -- Combine the two filters. Doing it this way around is much easier (always works, no ifs required),
-    -- but it means we need to make a copy of the filter above, so that the original does not get changed
-    table.insert(live_filter, filter_not_petrified)
-
-    return wesnoth.get_units(live_filter)
+    return units
 end
 
 function ai_helper.get_units_with_moves(filter)
@@ -943,13 +927,17 @@ function ai_helper.next_hop(unit, x, y, cfg)
         local sub_path, sub_cost = wesnoth.find_path( unit, path[i][1], path[i][2], cfg)
 
         if sub_cost <= unit.moves then
-            local unit_in_way = wesnoth.get_unit(path[i][1], path[i][2])
+            -- Check for unit in way only if cfg.ignore_units is not set
+            local unit_in_way
+            if (not cfg) or (not cfg.ignore_units) then
+                unit_in_way = wesnoth.get_unit(path[i][1], path[i][2])
 
-            -- If ignore_own_units is set, ignore own side units that can move out of the way
-            if cfg and cfg.ignore_own_units then
-                if unit_in_way and (unit_in_way.side == unit.side) then
-                    local reach = ai_helper.get_reachable_unocc(unit_in_way)
-                    if (reach:size() > 1) then unit_in_way = nil end
+                -- If ignore_own_units is set, ignore own side units that can move out of the way
+                if cfg and cfg.ignore_own_units then
+                    if unit_in_way and (unit_in_way.side == unit.side) then
+                        local reach = ai_helper.get_reachable_unocc(unit_in_way)
+                        if (reach:size() > 1) then unit_in_way = nil end
+                    end
                 end
             end
 
@@ -1203,7 +1191,7 @@ function ai_helper.get_attacks(units, cfg)
 
     -- Note: the remainder is optimized for speed, so we only get_units once,
     -- do not use WML filters, etc.
-    local all_units = wesnoth.get_units {}
+    local all_units = wesnoth.get_units()
 
     local enemy_map, my_unit_map, other_unit_map = LS.create(), LS.create(), LS.create()
     for i,unit in ipairs(all_units) do

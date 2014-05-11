@@ -15,6 +15,7 @@
 #include "gamestatus.hpp"
 #include "network.hpp"
 #include "log.hpp"
+#include "lua_jailbreak_exception.hpp"
 #include "play_controller.hpp"
 #include "actions/undo.hpp"
 #include "game_end_exceptions.hpp"
@@ -48,7 +49,7 @@ bool synced_context::run_in_synced_context(const std::string& commandname, const
 	synced_command::map::iterator it = synced_command::registry().find(commandname);
 	if(it == synced_command::registry().end())
 	{
-		error_handler("commandname not found", true);
+		error_handler("commandname [" +commandname +"] not found", true);
 	}
 	else
 	{
@@ -66,6 +67,36 @@ bool synced_context::run_in_synced_context(const std::string& commandname, const
 	resources::controller->check_victory();
 	DBG_REPLAY << "run_in_synced_context end\n";
 	return true;
+}
+
+
+bool synced_context::run_in_synced_context_if_not_already(const std::string& commandname,const config& data, bool use_undo, bool show, synced_command::error_handler_function error_handler)
+{
+	switch(synced_context::get_syced_state())
+	{
+	case(synced_context::UNSYNCED):
+		return run_in_synced_context(commandname, data, use_undo, show, true, error_handler);
+	case(synced_context::LOCAL_CHOICE):
+		ERR_REPLAY << "trying to execute action while being in a local_choice\n";
+		//we reject it because such actions usually change the gamestate badly which is not intented during a local_choice.
+		return false;
+	case(synced_context::SYNCED):
+	{
+		synced_command::map::iterator it = synced_command::registry().find(commandname);
+		if(it == synced_command::registry().end())
+		{
+			error_handler("commandname [" +commandname +"]not found", true);
+			return false;
+		}
+		else
+		{
+			return it->second(data, use_undo, show, error_handler);
+		}
+	}
+	default:
+		assert(false && "found unknown synced_context::syced_state");
+		return false;
+	}
 }
 
 void synced_context::default_error_function(const std::string& message, bool /*heavy*/)
@@ -118,39 +149,60 @@ bool synced_context::can_undo()
 	//if we called the rng or if we sended data of this action over the network already, undoing is impossible.
 	return (!is_simultaneously_) && (random_new::generator->get_random_calls() == 0);
 }
-
+namespace
+{
+	class lua_network_error : public network::error , public tlua_jailbreak_exception
+	{
+	public:
+		lua_network_error(network::error base)
+			: network::error(base), tlua_jailbreak_exception()
+		{}
+	private:
+		IMPLEMENT_LUA_JAILBREAK_EXCEPTION(lua_network_error)
+	};
+}
 void synced_context::pull_remote_user_input()
 {
 	//we sended data over the network.
 	is_simultaneously_ = true;
 	//code copied form persist_var, feels strange to call ai::.. functions for something where the ai isn't involved....
 	//note that ai::manager::raise_sync_network isn't called by the ai at all anymore (one more reason to put it somehwere else)
-	try
-	{
-		ai::manager::raise_user_interact();
-	}
-	catch(end_turn_exception&)
-	{
-		//ignore, since it will be thwown throw again.
-	}
-	
-	try
-	{
-		ai::manager::raise_sync_network();
-	}
-	catch(end_turn_exception&)
-	{
-		//ignore, since it will be thwown again.
-	}
+	try{
+		if(resources::gamedata->phase() == game_data::PLAY || resources::gamedata->phase() == game_data::START)
+		{
+			//during the prestart/preload event the screen is locked and we shouldn't call user_interact.
+			//because that might result in crashs if someone clicks anywhere during screenlock.
+			try
+			{
+				ai::manager::raise_user_interact();
+			}
+			catch(end_turn_exception&)
+			{
+				//ignore, since it will be thwown throw again.
+			}
+		}
+		try
+		{
+			ai::manager::raise_sync_network();
+		}
+		catch(end_turn_exception&)
+		{
+			//ignore, since it will be thwown again.
+		}
 
-	try
-	{
-		// in some cases network::receive_data only returns the wanted result on the second try.
-		ai::manager::raise_sync_network();
+		try
+		{
+			// in some cases network::receive_data only returns the wanted result on the second try.
+			ai::manager::raise_sync_network();
+		}
+		catch(end_turn_exception&)
+		{
+			//ignore, since it will throw again.
+		}
 	}
-	catch(end_turn_exception&)
+	catch(network::error& err)
 	{
-		//ignore, since it will throw again.
+		throw lua_network_error(err);
 	}
 
 }
@@ -247,6 +299,18 @@ config synced_context::ask_server(const std::string &name, const mp_sync::user_c
 				network::send_data(data,0);
 				did_require = true;
 			}
+			else if (!did_require)
+			{
+				if(resources::gamedata->phase() != game_data::PLAY && resources::gamedata->phase() != game_data::START)
+				{
+					//this is needed becasue sometimes a package gets stuck on the server 
+					//and in this case sending any package can free that package
+					//especialy when this function is called from prestart events where the screen is locked, we don't want to make the user wait.
+					//I currently can only reproduce this bug on local wesnothd (windows 7x64, msvc 32 bit release build), not on the offical server
+					network::send_data(config_of("give_me_a_package", "now"));
+				}
+				did_require = true;
+			}
 			SDL_Delay(10);
 
 			continue;
@@ -262,12 +326,15 @@ config synced_context::ask_server(const std::string &name, const mp_sync::user_c
 			if (!action) 
 			{
 				replay::process_error("[" + name + "] expected but none found\n");
-				return config();
+				get_replay_source().revert_action();
+				return uch.query_user(-1);
 			}
-			if (!action->has_child(name)) 
+			if (!action->has_child(name))
 			{
 				replay::process_error("[" + name + "] expected but none found, found instead:\n " + action->debug() + "\n");
-				return config();
+				
+				get_replay_source().revert_action();
+				return uch.query_user(-1);
 			}
 			if((*action)["from_side"].str() != "server" || (*action)["side_invalid"].to_bool(false) )
 			{
@@ -347,6 +414,33 @@ set_scontext_local_choice::set_scontext_local_choice()
 }
 set_scontext_local_choice::~set_scontext_local_choice()
 {
+	assert(synced_context::get_syced_state() == synced_context::LOCAL_CHOICE);
+	synced_context::set_syced_state(synced_context::SYNCED);
+	delete random_new::generator;
+	random_new::generator = old_rng_;
+}
+
+set_scontext_leave_for_draw::set_scontext_leave_for_draw()
+	: previous_state_(synced_context::get_syced_state())
+{
+	if(previous_state_ != synced_context::SYNCED)
+	{
+		return;
+	}
+	synced_context::set_syced_state(synced_context::LOCAL_CHOICE);
+
+	
+	old_rng_ = random_new::generator;
+	//calling the synced rng form inside a local_choice would cause oos.
+	//TODO use a member variable instead if new/delete
+	random_new::generator = new random_new::rng();
+}
+set_scontext_leave_for_draw::~set_scontext_leave_for_draw()
+{
+	if(previous_state_ != synced_context::SYNCED)
+	{
+		return;
+	}
 	assert(synced_context::get_syced_state() == synced_context::LOCAL_CHOICE);
 	synced_context::set_syced_state(synced_context::SYNCED);
 	delete random_new::generator;

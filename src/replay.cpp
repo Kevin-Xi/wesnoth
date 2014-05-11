@@ -26,6 +26,7 @@
 #include "actions/create.hpp"
 #include "actions/move.hpp"
 #include "actions/undo.hpp"
+#include "config_assign.hpp"
 #include "dialogs.hpp"
 #include "game_display.hpp"
 #include "game_end_exceptions.hpp"
@@ -204,7 +205,13 @@ void replay::append(const config& cfg)
 {
 	cfg_.append(cfg);
 }
+/*
+	TODO: there should be different types of OOS messages:
+		1)the normal OOS message
+		2) the 'is guarenteed you'll get an assertion error after this and therefore you cannot continur' OOS message
+		3) the 'do you want to overwrite calculated data with the data stored in replay' OOS error message.
 
+*/
 void replay::process_error(const std::string& msg)
 {
 	ERR_REPLAY << msg;
@@ -222,12 +229,12 @@ bool replay::is_skipping() const
 	return skip_;
 }
 
-void replay::add_unit_checksum(const map_location& loc,config* const cfg)
+void replay::add_unit_checksum(const map_location& loc,config& cfg)
 {
 	if(! game_config::mp_debug) {
 		return;
 	}
-	config& cc = cfg->add_child("checksum");
+	config& cc = cfg.add_child("checksum");
 	loc.write(cc);
 	unit_map::const_iterator u = resources::units->find(loc);
 	assert(u.valid());
@@ -237,91 +244,87 @@ void replay::add_unit_checksum(const map_location& loc,config* const cfg)
 
 void replay::init_side()
 {
-	config* const cmd = add_command();
+	config& cmd = add_command();
 	config init_side;
 	init_side["side_number"] = resources::controller->current_side();
-	cmd->add_child("init_side", init_side);
+	cmd.add_child("init_side", init_side);
 }
 
 void replay::add_start()
 {
-	config* const cmd = add_command();
-	(*cmd)["sent"] = true;
-	cmd->add_child("start");
+	config& cmd = add_command();
+	cmd["sent"] = true;
+	cmd.add_child("start");
 }
 
 void replay::add_countdown_update(int value, int team)
 {
-	config* const cmd = add_command();
+	config& cmd = add_command();
 	config val;
 	val["value"] = value;
 	val["team"] = team;
-	cmd->add_child("countdown_update",val);
+	cmd.add_child("countdown_update",val);
 }
 void replay::add_synced_command(const std::string& name, const config& command)
 {
-	config* const cmd = add_command();
-	cmd->add_child(name,command);
-	LOG_REPLAY << "add_synced_command: \n" << cmd->debug() << "\n";
+	config& cmd = add_command();
+	cmd.add_child(name,command);
+	LOG_REPLAY << "add_synced_command: \n" << cmd.debug() << "\n";
 }
 
 
 
 void replay::user_input(const std::string &name, const config &input, int from_side)
 {
-	config* const cmd = add_command();
-	(*cmd)["dependent"] = true;
+	config& cmd = add_command();
+	cmd["dependent"] = true;
 	if(from_side == -1)
 	{
-		(*cmd)["from_side"] = "server";
+		cmd["from_side"] = "server";
 	}
 	else
 	{
-		(*cmd)["from_side"] = from_side;
+		cmd["from_side"] = from_side;
 	}
-	cmd->add_child(name, input);
+	cmd.add_child(name, input);
 }
 
 void replay::add_label(const terrain_label* label)
 {
 	assert(label);
-	config* const cmd = add_command();
-
-	(*cmd)["undo"] = false;
-
+	config& cmd = add_nonundoable_command();
 	config val;
 
 	label->write(val);
 
-	cmd->add_child("label",val);
+	cmd.add_child("label",val);
 }
 
 void replay::clear_labels(const std::string& team_name, bool force)
 {
-	config* const cmd = add_command();
+	config& cmd = add_nonundoable_command();
 
-	(*cmd)["undo"] = false;
 	config val;
 	val["team_name"] = team_name;
 	val["force"] = force;
-	cmd->add_child("clear_labels",val);
+	cmd.add_child("clear_labels",val);
 }
 
 void replay::add_rename(const std::string& name, const map_location& loc)
 {
-	config* const cmd = add_command();
-	(*cmd)["async"] = true; // Not undoable, but depends on moves/recruits that are
+	config& cmd = add_command();
+	cmd["async"] = true; // Not undoable, but depends on moves/recruits that are
 	config val;
 	loc.write(val);
 	val["name"] = name;
-	cmd->add_child("rename", val);
+	cmd.add_child("rename", val);
 }
 
 
 void replay::end_turn()
 {
-	config* const cmd = add_command();
-	cmd->add_child("end_turn");
+	config& cmd = add_command();
+	cmd.add_child("end_turn");
 }
 
 
@@ -350,8 +353,8 @@ void replay::add_checksum_check(const map_location& loc)
 	if(! game_config::mp_debug || ! (resources::units->find(loc).valid()) ) {
 		return;
 	}
-	config* const cmd = add_command();
-	(*cmd)["dependent"] = true;
+	config& cmd = add_command();
+	cmd["dependent"] = true;
 	add_unit_checksum(loc,cmd);
 }
 
@@ -362,12 +365,9 @@ void replay::add_chat_message_location()
 
 void replay::speak(const config& cfg)
 {
-	config* const cmd = add_command();
-	if(cmd != NULL) {
-		cmd->add_child("speak",cfg);
-		(*cmd)["undo"] = false;
-		add_chat_message_location();
-	}
+	config& cmd = add_nonundoable_command();
+	cmd.add_child("speak",cfg);
+	add_chat_message_location();
 }
 
 void replay::add_chat_log_entry(const config &cfg, std::back_insert_iterator<std::vector<chat_msg> > &i) const
@@ -418,7 +418,7 @@ config replay::get_data_range(int cmd_start, int cmd_end, DATA_TYPE data_type)
 	for (int cmd = cmd_start; cmd < cmd_end; ++cmd)
 	{
 		config &c = command(cmd);
-		if ((data_type == ALL_DATA || c["undo"] == "no") && c["sent"] != "yes")
+		if ((data_type == ALL_DATA || !c["undo"].to_bool(true)) && !c["sent"].to_bool(false))
 		{
 			res.add_child("command", c);
 			if (data_type == NON_UNDO_DATA) c["sent"] = true;
@@ -484,7 +484,7 @@ void replay::undo_cut(config& dst)
 	int cmd;
 	for (cmd = ncommands() - 1; cmd >= 0; --cmd)
 	{
-		//"undo"=no means speak/label/remove_label
+		//"undo"=no means speak/label/remove_label, especialy attack, recruits etc. have "undo"=yes
 		//"async"=yes means rename_unit
 		//"dependent"=true means user input or unit_checksum_check
 		config &c = command(cmd);
@@ -493,8 +493,8 @@ void replay::undo_cut(config& dst)
 		{
 			continue;
 		}
-		if (cc["undo"] != "no" && cc["async"] != "yes" && cc["sent"] != "yes") break;
-		if (cc["async"] == "yes") {
+		if (cc["undo"].to_bool(true) && !cc["async"].to_bool(false) && !cc["sent"].to_bool(false)) break;
+		if (cc["async"].to_bool(false)) {
 			async_cmd ac = { &c, cmd };
 			async_cmds.push_back(ac);
 		}
@@ -589,12 +589,20 @@ int replay::ncommands() const
 	return cfg_.child_count("command");
 }
 
-config* replay::add_command()
+config& replay::add_command()
 {
 	//pos_ != ncommands() means that there is a command on the replay which would be skipped.
 	assert(pos_ == ncommands());
 	pos_ = ncommands()+1;
-	return &cfg_.add_child("command");
+	return cfg_.add_child("command");
+}
+
+config& replay::add_nonundoable_command()
+{
+	config& r = cfg_.add_child_at("command",config(), pos_);
+	r["undo"] = false;
+	++pos_;
+	return r;
 }
 
 void replay::start_replay()
@@ -686,7 +694,20 @@ static void check_checksums(const config &cfg)
 	}
 }
 
-
+bool replay::add_start_if_not_there_yet()
+{
+	//this method would confuse the value of 'pos' otherwise
+	assert(pos_ == 0);
+	if(at_end() || !cfg_.child("command", pos_).has_child("start"))
+	{
+		cfg_.add_child_at("command",config_of("start", config()),pos_);
+		return true;
+	}
+	else
+	{
+		return false;
+	}
+}
 
 static void show_oos_error_error_function(const std::string& message, bool /*heavy*/)
 {
@@ -713,29 +734,28 @@ REPLAY_RETURN do_replay_handle(int side_num)
 
 	for(;;) {
 		const config *cfg = get_replay_source().get_next_action();
-		bool is_synced = (synced_context::get_syced_state() == synced_context::SYNCED);
+		const bool is_synced = (synced_context::get_syced_state() == synced_context::SYNCED);
+				
+		DBG_REPLAY << "in do replay with is_synced=" << is_synced << "\n";
 
-		if (cfg)
+		if (cfg != NULL)
 		{
 			DBG_REPLAY << "Replay data:\n" << *cfg << "\n";
 		}
 		else
 		{
 			DBG_REPLAY << "Replay data at end\n";
-		}
-
-		LOG_REPLAY << "in do replay with is_synced=" << is_synced << "\n";
-
-		//if there is nothing more in the records
-		if(cfg == NULL) {
-			//replayer.set_skip(false);
 			return REPLAY_RETURN_AT_END;
 		}
 
-		config::all_children_itors ch_itors = cfg->all_children_range();
+
+		const config::all_children_itors ch_itors = cfg->all_children_range();
 		//if there is an empty command tag or a start tag
 		if (ch_itors.first == ch_itors.second || cfg->has_child("start"))
 		{
+			//this shouldn't happen anymore becasue replaycontroller now moves over the [start] with get_next_action
+			//also we removed the the "add empty replay entry at scenario reload" behaviour.
+			ERR_REPLAY << "found "<<  cfg->debug() <<" in replay\n";
 			//do nothing
 		}
 		else if (const config &child = cfg->child("speak"))
@@ -793,12 +813,19 @@ REPLAY_RETURN do_replay_handle(int side_num)
 
 		else if (cfg->child("init_side"))
 		{
+			
 			if(is_synced)
 			{
 				replay::process_error("found init_side in replay while is_synced=true\n" );
+				get_replay_source().revert_action();
+				//fits better than the other options, and should have the desired effect.
+				return REPLAY_FOUND_DEPENDENT;
 			}
-			set_scontext_synced sync;
-			resources::controller->do_init_side(side_num - 1, true);
+			else
+			{
+				set_scontext_synced sync;
+				resources::controller->do_init_side(side_num - 1, true);
+			}
 		}
 
 		//if there is an end turn directive
@@ -807,16 +834,22 @@ REPLAY_RETURN do_replay_handle(int side_num)
 			if(is_synced)
 			{
 				replay::process_error("found end_turn in replay while is_synced=true\n" );
+				get_replay_source().revert_action();
+				//fits better than the other options, and should have the desired effect.
+				return REPLAY_FOUND_DEPENDENT;
 			}
-			// During the original game, the undo stack would have been
-			// committed at this point.
-			resources::undo_stack->clear();
+			else
+			{
+				// During the original game, the undo stack would have been
+				// committed at this point.
+				resources::undo_stack->clear();
 
-			if (const config &child = cfg->child("verify")) {
-				verify(*resources::units, child);
+				if (const config &child = cfg->child("verify")) {
+					verify(*resources::units, child);
+				}
+
+				return REPLAY_FOUND_END_TURN;
 			}
-
-			return REPLAY_FOUND_END_TURN;
 		}
 		else if (const config &child = cfg->child("countdown_update"))
 		{
@@ -842,6 +875,8 @@ REPLAY_RETURN do_replay_handle(int side_num)
 			if(!is_synced)
 			{
 				replay::process_error("found dependent command in replay while is_synced=false\n" );
+				//ignore this command
+				continue;
 			}
 			//this means user choice.
 			// it never makes sense to try to execute a user choice.
@@ -855,15 +890,22 @@ REPLAY_RETURN do_replay_handle(int side_num)
 		}
 		else
 		{
+			//we checked for empty commands at the beginning.
 			const std::string & commandname = cfg->ordered_begin()->key;
 			config data = cfg->ordered_begin()->cfg;
 			
 			if(is_synced)
 			{
 				replay::process_error("found " + commandname + " command in replay while is_synced=true\n" );
+				get_replay_source().revert_action();
+				//fits better than the other options, and should have the desired effect.
+				return REPLAY_FOUND_DEPENDENT;
 			}
-			LOG_REPLAY << "found commandname " << commandname << "in replay";
-			synced_context::run_in_synced_context(commandname, data, false, !get_replay_source().is_skipping(), false,show_oos_error_error_function);
+			else
+			{
+				LOG_REPLAY << "found commandname " << commandname << "in replay";
+				synced_context::run_in_synced_context(commandname, data, false, !get_replay_source().is_skipping(), false,show_oos_error_error_function);
+			}
 		}
 
 		if (const config &child = cfg->child("verify")) {
@@ -924,8 +966,8 @@ static std::map<int, config> get_user_choice_internal(const std::string &name, c
 
 
 	//this should never change during the execution of this function.
-	int current_side = resources::controller->current_side();
-	bool is_mp_game = network::nconnections() != 0;
+	const int current_side = resources::controller->current_side();
+	const bool is_mp_game = network::nconnections() != 0;
 	
 	std::map<int,config> retv;
 	/*
@@ -1007,6 +1049,16 @@ static std::map<int, config> get_user_choice_internal(const std::string &name, c
 			else if( !action->has_child(name))
 			{
 				replay::process_error("[" + name + "] expected but none found\n. found instead:\n" + action->debug());
+				//We save this action for later
+				get_replay_source().revert_action();
+				//and let the user try to get the intended result.
+				BOOST_FOREACH(int side, sides)
+				{
+					if(retv.find(side) == retv.end())
+					{
+						retv[side] = uch.query_user(side);
+					}
+				}
 				return retv;
 			}
 			int from_side = (*action)["from_side"].to_int(0);

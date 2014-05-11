@@ -55,6 +55,10 @@
 
 #include <boost/foreach.hpp>
 
+static lg::log_domain log_aitesting("aitesting");
+#define LOG_AIT LOG_STREAM(info, log_aitesting)
+//If necessary, this define can be replaced with `#define LOG_AIT std::cout` to restore previous behavior
+
 static lg::log_domain log_engine("engine");
 #define LOG_NG LOG_STREAM(info, log_engine)
 #define DBG_NG LOG_STREAM(debug, log_engine)
@@ -924,11 +928,11 @@ bool play_controller::can_execute_command(const hotkey::hotkey_command& cmd, int
 	case hotkey::HOTKEY_MINIMAP_DRAW_TERRAIN:
 	case hotkey::HOTKEY_MINIMAP_DRAW_VILLAGES:
 	case hotkey::HOTKEY_NULL:
+	case hotkey::HOTKEY_SAVE_REPLAY:
 		return true;
 
 	// Commands that have some preconditions:
 	case hotkey::HOTKEY_SAVE_GAME:
-	case hotkey::HOTKEY_SAVE_REPLAY:
 		return !events::commands_disabled;
 
 	case hotkey::HOTKEY_SHOW_ENEMY_MOVES:
@@ -1388,17 +1392,15 @@ void play_controller::set_defeat_music_list(const std::string& list)
 
 void play_controller::check_victory()
 {
-	check_end_level();
-
 	std::set<unsigned> not_defeated;
 	for (unit_map::const_iterator i = units_.begin(),
 	     i_end = units_.end(); i != i_end; ++i)
 	{
 		if (i->can_recruit()) {
-			DBG_NG << "seen leader for side " << i->side() << "\n";
+			//DBG_NG << "seen leader for side " << i->side() << "\n";
 			not_defeated.insert(i->side());
 		} else if (teams_[i->side()-1].fight_on_without_leader()) {
-			DBG_NG << "side doesn't require leader " << i->side() << "\n";
+			//DBG_NG << "side doesn't require leader " << i->side() << "\n";
 			not_defeated.insert(i->side());
 		}
 	}
@@ -1419,6 +1421,8 @@ void play_controller::check_victory()
 			}
 		}
 	}
+
+	check_end_level();
 
 	bool found_player = false;
 
@@ -1452,13 +1456,13 @@ void play_controller::check_victory()
 	}
 
 	if (non_interactive()) {
-		std::cout << "winner: ";
+		LOG_AIT << "winner: ";
 		BOOST_FOREACH(unsigned l, not_defeated) {
 			std::string ai = ai::manager::get_active_ai_identifier_for_side(l);
 			if (ai.empty()) ai = "default ai";
-			std::cout << l << " (using " << ai << ") ";
+			LOG_AIT << l << " (using " << ai << ") ";
 		}
-		std::cout << '\n';
+		LOG_AIT << '\n';
 		ai_testing::log_victory(not_defeated);
 	}
 

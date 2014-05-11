@@ -755,8 +755,9 @@ std::vector<std::string> unit::get_traits_list() const
 	BOOST_FOREACH(const config &mod, modifications_.child_range("trait"))
 	{
 			std::string const &id = mod["id"];
-			if (!id.empty())
-				res.push_back(id);
+			// Make sure to return empty id trait strings as otherwise
+			// names will not match in length (Bug #21967)
+			res.push_back(id);
 	}
 	return res;
 }
@@ -1654,7 +1655,7 @@ bool unit::internal_matches_filter(const vconfig& cfg, const map_location& loc, 
 	}
 	config::attribute_value cfg_formula = cfg["formula"];
 	if (!cfg_formula.blank()) {
-		const unit_callable callable(std::pair<map_location, unit>(loc,*this));
+		const unit_callable callable(loc,*this);
 		const game_logic::formula form(cfg_formula);
 		if(!form.evaluate(callable).as_bool()) {///@todo use formula_ai
 			return false;
@@ -2395,7 +2396,7 @@ void unit::add_modification(const std::string& mod_type, const config& mod, bool
 		is_fearless_ = is_fearless_ || id == "fearless";
 		is_healthy_ = is_healthy_ || id == "healthy";
 		if (!mod["generate_description"].empty()) {
-			generate_description = mod["generate_description"];
+			generate_description = mod["generate_description"].to_bool();
 		}
 	}
 

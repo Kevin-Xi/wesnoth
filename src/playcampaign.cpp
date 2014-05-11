@@ -40,6 +40,7 @@
 #include "savegame.hpp"
 #include "sound.hpp"
 #include "wml_exception.hpp"
+#include "unit_id.hpp"
 #include "formula_string_utils.hpp"
 
 #include <boost/foreach.hpp>
@@ -353,20 +354,20 @@ static LEVEL_RESULT playmp_scenario(const config& game_config,
 	}
 
 	if (!disp.video().faked() && res != QUIT) {
-		if (!end_level.transient.linger_mode) {
-			if(!playcontroller.is_host()) {
-				// If we continue without lingering we need to
-				// make sure the host uploads the next scenario
-				// before we attempt to download it.
-				playcontroller.wait_for_upload();
-			}
-		} else {
-			try {
-				playcontroller.linger();
-			} catch(end_level_exception& e) {
-				if (e.result == QUIT) {
-					return QUIT;
+		try {
+			if (!end_level.transient.linger_mode) {
+				if(!playcontroller.is_host()) {
+					// If we continue without lingering we need to
+					// make sure the host uploads the next scenario
+					// before we attempt to download it.
+					playcontroller.wait_for_upload();
 				}
+			} else {
+				playcontroller.linger();
+			}
+		} catch(end_level_exception& e) {
+			if (e.result == QUIT) {
+				return QUIT;
 			}
 		}
 	}
@@ -483,13 +484,6 @@ LEVEL_RESULT play_game(game_display& disp, game_state& gamestate,
 			}
 
 			sound::empty_playlist();
-
-			//add the variables to the starting_pos unless they are already there
-			const config &wmlvars = gamestate.replay_start().child("variables");
-			if (!wmlvars || wmlvars.empty()){
-				gamestate.replay_start().clear_children("variables");
-				gamestate.replay_start().add_child("variables", gamestate.carryover_sides_start.child_or_empty("variables"));
-			}
 
 			switch (io_type){
 			case IO_NONE:
@@ -614,6 +608,7 @@ LEVEL_RESULT play_game(game_display& disp, game_state& gamestate,
 				}
 
 				params.scenario_data = *scenario;
+				params.scenario_data["next_underlying_unit_id"] = n_unit::id_manager::instance().get_save_id();
 				params.mp_scenario = (*scenario)["id"].str();
 				params.mp_scenario_name = (*scenario)["name"].str();
 				params.num_turns = (*scenario)["turns"].to_int(-1);
@@ -628,6 +623,7 @@ LEVEL_RESULT play_game(game_display& disp, game_state& gamestate,
 				if (allow_new_game_flag || (game_config::debug && network::nconnections() == 0)) {
 					// Opens mp::connect dialog to allow users to
 					// make an adjustments for scenario.
+					// TODO: Fix this so that it works when network::nconnections() > 0 as well.
 					mp::ui::result connect_res = mp::goto_mp_connect(disp,
 						*connect_engine, game_config, params.name);
 					if (connect_res == mp::ui::QUIT) {

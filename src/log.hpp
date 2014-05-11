@@ -75,6 +75,7 @@ public:
 };
 
 bool set_log_domain_severity(std::string const &name, int severity);
+bool set_log_domain_severity(std::string const &name, const logger &lg);
 std::string list_logdomains(const std::string& filter);
 
 class logger {
@@ -89,9 +90,15 @@ public:
 	{
 		return severity_ > domain.domain_->second;
 	}
+
+	int get_severity() const
+	{
+		return severity_;
+	}
 };
 
 void timestamps(bool);
+void precise_timestamps(bool);
 std::string get_timestamp(const time_t& t, const std::string& format="%Y%m%d %H:%M:%S ");
 std::string get_timespan(const time_t& t);
 

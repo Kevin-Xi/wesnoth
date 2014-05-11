@@ -12,6 +12,8 @@
    See the COPYING file for more details.
 */
 
+#define GETTEXT_DOMAIN "wesnoth-test"
+
 #include <boost/test/unit_test.hpp>
 
 #include "log.hpp"
@@ -52,6 +54,7 @@ BOOST_AUTO_TEST_CASE( test_1 ) {
 	t_uresult uresult1 = unit_map.add(map_location(1,1), orc1_side0_real);
 
 	BOOST_CHECK_MESSAGE(uresult1.second == true, "Good Add");
+	BOOST_CHECK_EQUAL(unit_map.size(), 1);
 
 	unit_map::unit_iterator ui = unit_map.find(map_location(1,1));
 	BOOST_CHECK_MESSAGE(uresult1.first == ui, "Good Add");
@@ -64,11 +67,20 @@ BOOST_AUTO_TEST_CASE( test_1 ) {
 
 	//	unit * orc1p = new unit(orc1_side0_real);
 
+	lg::set_log_domain_severity("engine", lg::err.get_severity() - 1); // Don't log anything
+	lg::set_log_domain_severity("unit", lg::err);
 	uresult1 = unit_map.add(map_location(1,1), orc1_side0_real);
+	lg::set_log_domain_severity("unit", lg::warn);
+	lg::set_log_domain_severity("engine", lg::info);
+	BOOST_CHECK_EQUAL(unit_map.size(), 1);
 	BOOST_CHECK_MESSAGE(uresult1.second == false, "Didn't Add at occupied location.");
 	BOOST_CHECK_MESSAGE(uresult1.first == unit_map.end(), "Didn't Add at occupied location.");
 
+	lg::set_log_domain_severity("engine", lg::err.get_severity() - 1); // Don't log anything
+	// If the location is invalid, the unit never needs to be cloned, so no warning is emitted in the unit domain
 	uresult1 = unit_map.add(map_location(-1,1), orc1_side0_real);
+	lg::set_log_domain_severity("engine", lg::info);
+	BOOST_CHECK_EQUAL(unit_map.size(), 1);
 	BOOST_CHECK_MESSAGE(uresult1.second == false, "Didn't Add at invalid location.");
 	BOOST_CHECK_MESSAGE(uresult1.first == unit_map.end(), "Didn't Add at invalid location.");
 
@@ -76,7 +88,12 @@ BOOST_AUTO_TEST_CASE( test_1 ) {
 	// std::cerr<<"ID real ="<<orc1_side0_real.underlying_id()<<"\n";
 	// std::cerr<<"ID fake ="<<orc2_side0_fake.underlying_id()<<"\n";
 
+	lg::set_log_domain_severity("engine", lg::err.get_severity() - 1); // Don't log anything
+	lg::set_log_domain_severity("unit", lg::err);
 	uresult1 = unit_map.add(map_location(1,2), orc1_side0_real);
+	lg::set_log_domain_severity("unit", lg::warn);
+	lg::set_log_domain_severity("engine", lg::info);
+	BOOST_CHECK_EQUAL(unit_map.size(), 2);
 	BOOST_CHECK_MESSAGE(uresult1.second == true, "Added in face of id collision.");
 	BOOST_CHECK_MESSAGE(uresult1.first != unit_map.end(), "Added in face of id collision.");
 	BOOST_CHECK_MESSAGE(uresult1.first->underlying_id() != orc1_side0_real.underlying_id(), "Found Orc1");
@@ -229,10 +246,11 @@ BOOST_AUTO_TEST_CASE( track_real_unit_by_iterator ) {
 
 	unit_map.insert(extracted_unit);
 
-	BOOST_CHECK_MESSAGE(unit_iterator.valid() == false, "Iterator should be invalid after extraction and reinsertion.");
+	BOOST_CHECK_MESSAGE(unit_iterator.valid(), "Iterator should be valid after extraction and reinsertion.");
 
-	unit_iterator = unit_map.find(hex);
-	BOOST_CHECK(unit_iterator.valid());
+	unit_map::unit_iterator unit_iterator2 = unit_map.find(hex);
+	BOOST_CHECK(unit_iterator2.valid());
+	BOOST_CHECK(unit_iterator == unit_iterator2);
 }
 
 BOOST_AUTO_TEST_CASE( track_fake_unit_by_iterator ) {
@@ -265,10 +283,11 @@ BOOST_AUTO_TEST_CASE( track_fake_unit_by_iterator ) {
 
 	unit_map.insert(extracted_unit);
 
-	BOOST_CHECK_MESSAGE(unit_iterator.valid() == false, "Iterator should be invalid after extraction and reinsertion.");
+	BOOST_CHECK_MESSAGE(unit_iterator.valid(), "Iterator should be valid after extraction and reinsertion.");
 
-	unit_iterator = unit_map.find(hex);
-	BOOST_CHECK(unit_iterator.valid());
+	unit_map::unit_iterator unit_iterator2 = unit_map.find(hex);
+	BOOST_CHECK(unit_iterator2.valid());
+	BOOST_CHECK(unit_iterator == unit_iterator2);
 }
 
 /* vim: set ts=4 sw=4: */

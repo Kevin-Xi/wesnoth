@@ -1,0 +1,254 @@
+#!/bin/bash
+#This script runs a sequence of wml unit test scenarios.
+#Use -h to get help with usage.
+
+usage()
+{
+  echo "Usage:" $0 "[OPTIONS]"
+  echo "Executes a series of wml unit test scenarios found in a file."
+  echo
+  echo -e "Options:"
+  echo -e "\t-h\tShows this help."
+  echo -e "\t-v\tVerbose mode."
+  echo -e "\t-d\tDebug mode."
+  echo -e "\t-u\tUse unix timeout instead of wesnoth --timeout argument."
+  echo -e "\t  \tUnix timeout will send a TERM signal, followed by KILL."
+  echo -e "\t-l arg\tLoads list of tests from the given file."
+  echo -e "\t  \tBy default, the file is wml_test_schedule."
+  echo
+  echo "Each line in the list of tests should be formatted:"
+  echo -e "\n\t<expected return code> <name of unit test scenario>\n"
+  echo "Lines beginning # are treated as comments."
+  echo "Expected return codes:"
+  for i in `seq 0 4`;
+  do
+    get_code_string $i
+    echo -e "\t" $i "-" $CodeString
+  done
+}
+
+get_code_string()
+{
+  case ${1} in
+  0)
+    CodeString="PASS"
+    ;;
+  1) 
+    CodeString="FAIL"
+    ;;
+  2)
+    CodeString="FAIL (TIMEOUT)"
+    ;;
+  3)
+    CodeString="FAIL (INVALID REPLAY)"
+    ;;
+  4)
+    CodeString="FAIL (ERRORED REPLAY)"
+    ;;
+  *)
+    CodeString="? ? ?"
+    ;;
+  esac
+}
+
+check_errs()
+{
+  # Argument 1 is the name of the test.
+  # Argument 2 is the wesnoth error code for the test. 
+  # Argument 3 is the expected error code.
+  if [ "${2}" -eq 134 -a "${3}" -eq 2 -a $UnixTimeout -eq 0 ]; then
+    if [ $Verbose -ge 2 ]; then
+      echo "Caught \'terminate called without an active exception\' return code 134"
+      echo "This means wesnoth tried to kill the thread but SDL threw an error..."
+      echo "(This happens occasionally when running the empty_test with a timeout.)"
+      echo "Since we expected timeout, the test passes."
+    fi
+    return 0
+  elif [ "${2}" -eq 124 -a "${3}" -eq 2 -a $UnixTimeout -eq 1 ]; then
+    if [ $Verbose -ge 2 ]; then
+      echo "Caught return code 124 from timeout"
+      echo "This signal means that the unix timeout utility killed wesnoth with TERM."
+      echo "Since we expected timeout, the test passes."
+    fi
+    return 0
+  elif [ "${2}" -eq 137 -a "${3}" -eq 2 -a $UnixTimeout -eq 1 ]; then
+    if [ $Verbose -ge 2 ]; then
+      echo "Caught return code 137 from timeout"
+      echo "This signal means that the unix timeout utility killed wesnoth with KILL."
+      echo "Since we expected timeout, the test passes."
+    fi
+    return 0
+  elif [ "${2}" -ne "${3}" ]; then 
+    get_code_string ${2}
+    echo -e ${1} ":   \t" ${2} "-" $CodeString
+    get_code_string ${3}
+    echo -e "Expected result :\t" ${3} "-" $CodeString
+    if [ -f "error.log" ]; then
+      echo ""
+      echo "Found error.log:"
+      cat error.log
+    fi
+    return 1
+  fi
+  return 0
+}
+
+run_test()
+{
+  # Argument 1 is the expected error code
+  # Argument 2 is the name of the test scenario
+  if [ "$FirstTest" -eq 1 ]; then
+    opts="--timeout 20000"
+  else
+    opts="--validcache --timeout 10000"
+  fi
+  if [ "$Verbose" -ge 1 ]; then
+    echo "wesnoth -u" $2 $opts "2> error.log"
+  fi
+  wesnoth -u $2 $opts 2> error.log
+  if check_errs $2 $? $1; then 
+    FirstTest=0 #Don't start using validcache flag until at least one test has passed without error
+    rm error.log
+    return 0
+  else
+    if [ -f "errors.log" ]; then
+      echo -e "\n--- next unit test ---\n" >> errors.log
+      cat error.log >> errors.log
+    else
+      cp error.log errors.log
+    fi
+    rm error.log
+    return 1
+  fi
+}
+
+#This doesn't use the wesnoth timeout mechanism, and uses the unix core "timeout" function instead
+run_test_unix_timeout()
+{
+  # Argument 1 is the expected error code
+  # Argument 2 is the name of the test scenario
+  if [ "$FirstTest" -eq 1 ]; then
+    opts=""
+    timer=20
+  else
+    opts="--validcache"
+    timer=10
+  fi
+  timer1=$((timer+1))
+  if [ "$Verbose" -ge 1 ]; then
+    echo "timeout" "--kill-after=$timer1" $timer "wesnoth -u" $2 $opts "2> error.log"
+  fi
+  timeout "--kill-after=$timer1" $timer wesnoth -u $2 $opts 2> error.log
+  if check_errs $2 $? $1; then 
+    FirstTest=0 #Don't start using validcache flag until at least one test has passed without error
+    rm error.log
+    return 0
+  else
+    if [ -f "errors.log" ]; then
+      echo -e "\n--- next unit test ---\n" >> errors.log
+      cat error.log >> errors.log
+    else
+      cp error.log errors.log
+    fi
+    rm error.log
+    return 1
+  fi
+}
+
+
+### Main Script Starts Here ###
+
+Verbose=0
+UnixTimeout=0
+LoadFile=wml_test_schedule
+
+while getopts ":vduh" Option
+do
+  case $Option in
+    v ) 
+      if [ $Verbose -lt 1 ]; then 
+        Verbose=1
+      fi
+      ;;
+    d )
+      if [ $Verbose -lt 2 ]; then 
+        Verbose=2
+      fi
+      ;;
+    u )
+      UnixTimeout=1
+      ;;
+    l )
+      LoadFile=$OPTARG
+      ;;
+    h )
+      usage
+      exit 0;
+      ;;
+  esac
+done
+shift $(($OPTIND - 1))
+
+echo "Getting tests from" $LoadFile "..."
+
+old_IFS=$IFS
+IFS=$'\n'
+schedule=($(cat $LoadFile)) # array
+IFS=$old_IFS
+
+TESTS=0
+COMMENTS=0
+
+for line in "${schedule[@]}"
+do
+    if [[ "$line" =~ \#.* ]]; then
+      COMMENTS=$((COMMENTS+1))
+    else
+      TESTS=$((TESTS+1))
+    fi
+done
+
+echo "Running" $TESTS "test scenarios."
+
+if [ -f "errors.log" ]; then
+  rm errors.log
+fi
+
+AllPassed=1
+FirstTest=1
+
+for line in "${schedule[@]}"
+do
+    if [[ "$line" =~ \#.* ]]; then
+      if [ $Verbose -ge 2 ]; then
+        echo "comment:" $line
+      fi
+    else
+      if [ $UnixTimeout -eq 1 ]; then 
+        if run_test_unix_timeout $line; then 
+          if [ $Verbose -ge 2 ]; then
+            echo "good"
+          fi
+        else
+          AllPassed=0
+        fi
+      else
+        if run_test $line; then #note: don't put run_test inside a pipe implicitly by using ! or something, this will cause the FirstTest variable not to work properly
+          if [ $Verbose -ge 2 ]; then
+            echo "good"
+          fi
+        else
+          AllPassed=0
+        fi
+      fi
+    fi
+done
+
+if [ $AllPassed -eq 0 ]; then
+  echo "Not all tests gave the correct result."
+  echo "Check errors.log for error reports."
+  exit 1
+else
+  echo "All tests gave the correct result."
+  exit 0
+fi

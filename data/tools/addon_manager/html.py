@@ -1,5 +1,5 @@
 # encoding: utf8
-import time, os, glob, sys
+import time, os, glob, sys, re
 from subprocess import Popen
 
 def output(path, url, data):
@@ -78,6 +78,7 @@ Select the add-on you want to install from the list and click "OK". The download
             icon = icon.strip()
             tilde = icon.find("~")
             if tilde >= 0: icon = icon[:tilde]
+            if "\\" in icon: icon = icon.replace("\\", "/")
             try: os.mkdir(path + "/icons")
             except OSError: pass
             if "." not in icon: icon += ".png"
@@ -130,12 +131,16 @@ Usually comes with an era or is dependency of another add-on.</div></td>""")
         elif type == "media":
             w("""\
 <td>Resources<div class="type"><b>miscellaneous content/media</b><br/>
-unit packs, terrain packs, music packs, etc. Usually a (perhaps optional) dependency of another add-on.</div></td>""")
+Unit packs, terrain packs, music packs, etc. Usually a (perhaps optional) dependency of another add-on.</div></td>""")
         else: w(('<td>%s</td>') % type)
         w(('<td><img alt="%s" src="%s" width="72px" height="72px"/>'
             ) % (icon, imgurl))
-        w('<div class="desc"><b>%s</b><br/>%s</div></td>' % (
-            name, v("description", "(no description)")))
+        described = v("description", "(no description)")
+        if described != "(no description)":
+            described = re.sub(r'(?<![">])http://[\w./?&=%~-]+', r'<a href="\g<0>">\g<0></a>', described)
+            described = re.sub(r'(?<![\w>"/])(forums?|r|R|wiki)\.wesnoth\.org[\w./?&=%~-]+', r'<a href="http://\g<0>">\g<0>"</a>"', described)
+        w('<div class="desc"><b>%s</b><pre>%s</pre></div></td>' % (
+            name, described))
         w("<td><b>%s</b><br/>" % name)
         w("Version: %s<br/>" % v("version", "unknown"))
         w("Author: %s</td>" % v("author", "unknown"))

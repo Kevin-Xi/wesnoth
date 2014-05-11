@@ -77,7 +77,7 @@ public:
 	void clear_labels(const std::string&, bool);
 	void add_rename(const std::string& name, const map_location& loc);
 	void end_turn();
-	void add_unit_checksum(const map_location& loc,config* const cfg);
+	void add_unit_checksum(const map_location& loc,config& cfg);
 	void add_checksum_check(const map_location& loc);
 	void add_log_data(const std::string &key, const std::string &var);
 	void add_log_data(const std::string &category, const std::string &key, const std::string &var);
@@ -102,8 +102,8 @@ public:
 	
 	void undo();
 	/*
-	undoes the last move and puts it into given config to be reone with redo
-	this is good, because even undoable commands can have dependent commands, which would otherwise get lost causing oos.
+		undoes the last move and puts it into given config to be reone with redo
+		this is good, because even undoable commands can have dependent commands, which would otherwise get lost causing oos.
 	*/
 	void undo_cut(config& dst);
 	/*
@@ -127,27 +127,34 @@ public:
 	int ncommands() const;
 
 	static void process_error(const std::string& msg);
-
+	/*
+		adds a [start] at the begnning of the replay if there is none.
+		returns true if a [start] was added.
+	*/
+	bool add_start_if_not_there_yet();
 private:
 
 	void add_chat_log_entry(const config &speak, std::back_insert_iterator< std::vector<chat_msg> > &i) const;
 
 	config &command(int);
 	void remove_command(int);
-	/** Adds a new empty command to the command list.
+	/** Adds a new empty command to the command list at the end.
 	 *
-	 * @return a pointer to the added command
+	 * @return a reference to the added command
 	 */
-	config* add_command();
+	config& add_command();
+	/** 
+	 * adds a new command to the command list at the current position.
+	 *
+	 * @return a reference to the added command
+	 */
+	config& add_nonundoable_command();
 	config cfg_;
 	int pos_;
 
 	bool skip_;
 
 	std::vector<int> message_locations;
-
-	/*a leftover from rng*/
-	void set_random(config*) {}
 };
 
 replay& get_replay_source();

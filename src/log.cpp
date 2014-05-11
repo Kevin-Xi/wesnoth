@@ -26,6 +26,7 @@
 #include "log.hpp"
 
 #include <boost/foreach.hpp>
+#include <boost/date_time.hpp>
 
 #include <map>
 #include <sstream>
@@ -45,7 +46,9 @@ public:
 static std::ostream null_ostream(new null_streambuf);
 static int indent = 0;
 static bool timestamp = true;
+static bool precise_timestamp = false;
 
+static boost::posix_time::time_facet facet("%Y%m%d %H:%M:%S%F ");
 static std::ostream *output_stream = NULL;
 
 static std::ostream& output()
@@ -72,6 +75,7 @@ tredirect_output_setter::~tredirect_output_setter()
 typedef std::map<std::string, int> domain_map;
 static domain_map *domains;
 void timestamps(bool t) { timestamp = t; }
+void precise_timestamps(bool pt) { precise_timestamp = pt; }
 
 logger err("error", 0), warn("warning", 1), info("info", 2), debug("debug", 3);
 log_domain general("general");
@@ -103,6 +107,9 @@ bool set_log_domain_severity(std::string const &name, int severity)
 		it->second = severity;
 	}
 	return true;
+}
+bool set_log_domain_severity(std::string const &name, const logger &lg) {
+	return set_log_domain_severity(name, lg.get_severity());
 }
 
 std::string list_logdomains(const std::string& filter)
@@ -140,6 +147,15 @@ std::string get_timespan(const time_t& t) {
 	return buf;
 }
 
+static void print_precise_timestamp(std::ostream & out)
+{
+	facet.put(
+		std::ostreambuf_iterator<char>(out), 
+		out, 
+		' ', 
+		boost::posix_time::microsec_clock::local_time());
+}
+
 std::ostream &logger::operator()(log_domain const &domain, bool show_names, bool do_indent) const
 {
 	if (severity_ > domain.domain_->second)
@@ -151,7 +167,11 @@ std::ostream &logger::operator()(log_domain const &domain, bool show_names, bool
 				stream << "  ";
 			}
 		if (timestamp) {
-			stream << get_timestamp(time(NULL));
+			if(precise_timestamp) {
+				print_precise_timestamp(stream);
+			} else {
+				stream << get_timestamp(time(NULL));
+			}
 		}
 		if (show_names) {
 			stream << name_ << ' ' << domain.domain_->first << ": ";

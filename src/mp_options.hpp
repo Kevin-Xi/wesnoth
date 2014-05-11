@@ -150,12 +150,10 @@ public:
 	 * @param gamecfg			The config object holding all eras, scenarios
 	 * 							and modifications.
 	 *
-	 * @param video				The screen to display the dialog on.
+	 * @param display			The screen to display the dialog on.
 	 *
-	 * @param initial_values	The initial values for each option.
+	 * @param initial_value 	The initial values for each option.
 	 */
-	//manager(const config& gamecfg, CVideo& video, const config& initial_values);
-
 	manager(const config& gamecfg, game_display& display, gui::scrollpane* pane, const config& initial_value);
 
 	~manager();

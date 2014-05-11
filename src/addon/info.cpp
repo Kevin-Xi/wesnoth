@@ -79,6 +79,7 @@ void addon_info::read(const config& cfg)
 		this->locales.push_back(locale["language"].str());
 	}
 
+	this->core = cfg["core"].str();
 	this->depends = utils::split(cfg["dependencies"].str());
 	this->feedback_url = cfg["feedback_url"].str();
 
@@ -103,6 +104,7 @@ void addon_info::write(config& cfg) const
 		cfg.add_child("translation")["language"] = locale_id;
 	}
 
+	cfg["core"] = this->core;
 	cfg["dependencies"] = utils::join(this->depends);
 	cfg["feedback_url"] = this->feedback_url;
 
@@ -117,6 +119,7 @@ void addon_info::write_minimal(config& cfg) const
 	cfg["type"] = get_addon_type_string(this->type);
 	cfg["title"] = this->title;
 	cfg["dependencies"] = utils::join(this->depends);
+	cfg["core"] = this->core;
 }
 
 std::string addon_info::display_title() const
@@ -170,6 +173,8 @@ std::string addon_info::display_type() const
 		return _("addon_type^MP campaign");
 	case ADDON_MP_MOD:
 		return _("addon_type^MP modification");
+	case ADDON_CORE:
+		return _("addon_type^Core");
 	case ADDON_MEDIA:
 		return _("addon_type^Resources");
 	case ADDON_OTHER:

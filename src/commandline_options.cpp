@@ -16,6 +16,7 @@
 #include "serialization/string_utils.hpp"
 #include "util.hpp"
 #include "lua/llimits.h"
+#include "log.hpp"
 
 #include <boost/version.hpp>
 #include <boost/foreach.hpp>
@@ -66,6 +67,7 @@ commandline_options::commandline_options ( int argc, char** argv ) :
 	log(),
 	load(),
 	logdomains(),
+	log_precise_timestamps(false),
 	multiplayer(false),
 	multiplayer_ai_config(),
 	multiplayer_algorithm(),
@@ -108,6 +110,9 @@ commandline_options::commandline_options ( int argc, char** argv ) :
 	screenshot_output_file(),
 	strict_validation(false),
 	test(),
+	unit_test(),
+	headless_unit_test(false),
+	noreplaycheck(false),
 	userconfig_path(false),
 	userconfig_dir(),
 	userdata_path(false),
@@ -156,7 +161,6 @@ commandline_options::commandline_options ( int argc, char** argv ) :
 		("username", po::value<std::string>(), "uses <username> when connecting to a server, ignoring other preferences.")
 		("password", po::value<std::string>(), "uses <password> when connecting to a server, ignoring other preferences.")
 		("strict-validation", "makes validation errors fatal")
-		("test,t", po::value<std::string>()->implicit_value(std::string()), "runs the game in a small test scenario. If specified, scenario <arg> will be used instead.")
 		("userconfig-dir", po::value<std::string>(), "sets the path of the user config directory to $HOME/<arg> or My Documents\\My Games\\<arg> for Windows. You can specify also an absolute path outside the $HOME or My Documents\\My Games directory. Defaults to $HOME/.config/wesnoth on X11 and to the userdata-dir on other systems.")
 		("userconfig-path", "prints the path of the user config directory and exits.")
 		("userdata-dir", po::value<std::string>(), "sets the path of the userdata directory to $HOME/<arg> or My Documents\\My Games\\<arg> for Windows. You can specify also an absolute path outside the $HOME or My Documents\\My Games directory.")
@@ -191,6 +195,7 @@ commandline_options::commandline_options ( int argc, char** argv ) :
 		("log-warning", po::value<std::string>(), "sets the severity level of the specified log domain(s) to 'warning'. Similar to --log-error.")
 		("log-info", po::value<std::string>(), "sets the severity level of the specified log domain(s) to 'info'. Similar to --log-error.")
 		("log-debug", po::value<std::string>(), "sets the severity level of the specified log domain(s) to 'debug'. Similar to --log-error.")
+		("log-precise", "shows the timestamps in the logfile with more precision")
 		;
 
 	po::options_description multiplayer_opts("Multiplayer options");
@@ -209,6 +214,15 @@ commandline_options::commandline_options ( int argc, char** argv ) :
 		("scenario", po::value<std::string>(), "selects a multiplayer scenario. The default scenario is \"multiplayer_The_Freelands\".")
 		("side", po::value<std::vector<std::string> >()->composing(), "selects a faction of the current era for this side by id. <arg> should have format side:value.")
 		("turns", po::value<std::string>(), "sets the number of turns. The default is \"50\".")
+		;
+
+	po::options_description testing_opts("Testing options");
+	testing_opts.add_options()
+		("test,t", po::value<std::string>()->implicit_value(std::string()), "runs the game in a small test scenario. If specified, scenario <arg> will be used instead.")
+		("unit,u", po::value<std::string>()->implicit_value(std::string()), "runs a unit test scenario. Works like test, except that the exit code of the program reflects the victory / defeat conditions of the scenario.\n\t0 - PASS\n\t1 - FAIL\n\t2 - FAIL (TIMEOUT)\n\t3 - FAIL (INVALID REPLAY)\n\t4 - FAIL (ERRORED REPLAY)")
+		("showgui", "don't run headlessly (for debugging a failing test)")
+		("timeout", po::value<unsigned int>(), "sets a timeout (milliseconds) for the unit test. If unused there is no timeout or threading.")
+		("noreplaycheck", "don't try to validate replay of unit test")
 		;
 
 	po::options_description preprocessor_opts("Preprocessor mode options");
@@ -231,7 +245,7 @@ commandline_options::commandline_options ( int argc, char** argv ) :
 	//hidden_.add_options()
 	//	("example-hidden-option", "")
 	//	;
-	visible_.add(general_opts).add(campaign_opts).add(display_opts).add(logging_opts).add(multiplayer_opts).add(preprocessor_opts).add(proxy_opts);
+	visible_.add(general_opts).add(campaign_opts).add(display_opts).add(logging_opts).add(multiplayer_opts).add(testing_opts).add(preprocessor_opts).add(proxy_opts);
 
 	all_.add(visible_).add(hidden_);
 
@@ -307,15 +321,17 @@ commandline_options::commandline_options ( int argc, char** argv ) :
 	if (vm.count("load"))
 		load = vm["load"].as<std::string>();
 	if (vm.count("log-error"))
-		 parse_log_domains_(vm["log-error"].as<std::string>(),0);
+		 parse_log_domains_(vm["log-error"].as<std::string>(),lg::err.get_severity());
 	if (vm.count("log-warning"))
-		 parse_log_domains_(vm["log-warning"].as<std::string>(),1);
+		 parse_log_domains_(vm["log-warning"].as<std::string>(),lg::warn.get_severity());
 	if (vm.count("log-info"))
-		 parse_log_domains_(vm["log-info"].as<std::string>(),2);
+		 parse_log_domains_(vm["log-info"].as<std::string>(),lg::info.get_severity());
 	if (vm.count("log-debug"))
-		 parse_log_domains_(vm["log-debug"].as<std::string>(),3);
+		 parse_log_domains_(vm["log-debug"].as<std::string>(),lg::debug.get_severity());
 	if (vm.count("logdomains"))
 		logdomains = vm["logdomains"].as<std::string>();
+	if (vm.count("log-precise"))
+		log_precise_timestamps = true;
 	if (vm.count("max-fps"))
 		max_fps = vm["max-fps"].as<int>();
 	if (vm.count("multiplayer"))
@@ -330,6 +346,8 @@ commandline_options::commandline_options ( int argc, char** argv ) :
 		nodelay = true;
 	if (vm.count("nomusic"))
 		nomusic = true;
+	if (vm.count("noreplaycheck"))
+		noreplaycheck = true;
 	if (vm.count("nosound"))
 		nosound = true;
 	if (vm.count("nogui"))
@@ -382,6 +400,17 @@ commandline_options::commandline_options ( int argc, char** argv ) :
 		multiplayer_side = parse_to_uint_string_tuples_(vm["side"].as<std::vector<std::string> >());
 	if (vm.count("test"))
 		test = vm["test"].as<std::string>();
+	if (vm.count("unit"))
+	{
+		unit_test = vm["unit"].as<std::string>();
+		headless_unit_test = true;
+	}
+	if (vm.count("showgui"))
+		headless_unit_test = false;
+	if (vm.count("timeout"))
+		timeout = vm["timeout"].as<unsigned int>();
+	if (vm.count("noreplaycheck"))
+		noreplaycheck = true;
 	if (vm.count("turns"))
 		multiplayer_turns = vm["turns"].as<std::string>();
 	if (vm.count("strict-validation"))

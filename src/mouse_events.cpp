@@ -500,12 +500,16 @@ void mouse_handler::select_or_action(bool browse)
 
 	unit_map::iterator clicked_u = find_unit(last_hex_);
 	unit_map::iterator selected_u = find_unit(selected_hex_);
-	if ( (clicked_u != resources::units->end() && clicked_u->side() == side_num_)
-			|| ((selected_u == resources::units->end()) && (clicked_u != resources::units->end()))
-			|| ((selected_u != resources::units->end() && selected_u->side() != side_num_ && clicked_u != resources::units->end())) )
+	if ( clicked_u != resources::units->end() &&
+		 ((selected_u == resources::units->end()) ||
+		  (selected_u != resources::units->end() && selected_u->side() != side_num_)) )
+	{
 		select_hex(last_hex_, false);
+	}
 	else
+	{
 		move_action(browse);
+	}
 }
 
 void mouse_handler::move_action(bool browse)
@@ -565,6 +569,10 @@ void mouse_handler::move_action(bool browse)
 					if (resources::whiteboard->is_active()) {
 						save_whiteboard_attack(attack_from, clicked_u->get_location(), choice);
 					} else {
+						// clear current unit selection so that any other unit selected
+						// triggers a new selection
+						selected_hex_ = map_location();
+						
 						attack_enemy(u->get_location(), clicked_u->get_location(), choice);
 					}
 				}
@@ -601,7 +609,17 @@ void mouse_handler::move_action(bool browse)
 					save_whiteboard_attack(attack_from, hex, choice);
 				}
 				else if ( move_unit_along_current_route() ) {
+					bool alt_unit_selected = (selected_hex_ != src);
+					src = selected_hex_;
+					// clear current unit selection so that any other unit selected
+					// triggers a new selection
+					selected_hex_ = map_location();
+					
 					attack_enemy(attack_from, hex, choice); // Fight !!
+					if (alt_unit_selected && !selected_hex_.valid()) {
+						//reselect other unit if selected during movement animation
+						select_hex(src, browse);
+					}
 				}
 				//TODO: Maybe store the attack choice so "press t to continue"
 				//      can also continue the attack?
@@ -672,10 +690,7 @@ void mouse_handler::move_action(bool browse)
 
 void mouse_handler::select_hex(const map_location& hex, const bool browse, const bool highlight, const bool fire_event) {
 
-	if (selected_hex_ == hex)
-		selected_hex_ = map_location::null_location;
-	else
-		selected_hex_ = hex;
+	selected_hex_ = hex;
 
 	gui().select_hex(selected_hex_);
 	gui().clear_attack_indicator();
@@ -944,6 +959,8 @@ int mouse_handler::show_attack_dialog(const map_location& attacker_loc, const ma
 		}
 	}
 
+	std::vector<int> disable_items_skip;
+
 	std::vector<std::string> items;
 	{
 		const config tmp_config;
@@ -959,8 +976,10 @@ int mouse_handler::show_attack_dialog(const map_location& attacker_loc, const ma
 
 			// Don't show iff the weapon has at least one active "disable" special.
 			// TODO also skip disabled weapons in the gui2 dialog.
-			if (attw.get_special_bool("disable"))
+			if (attw.get_special_bool("disable")) {
+				disable_items_skip.push_back(i);
 				continue;
+			}
 
 			// if missing, add dummy special, to be sure to have
 			// big enough minimum width (weapon's name can be very short)
@@ -1042,6 +1061,10 @@ int mouse_handler::show_attack_dialog(const map_location& attacker_loc, const ma
 	}
 	cursor::set(cursor::NORMAL);
 
+	BOOST_FOREACH(int i, disable_items_skip) {
+		if (i<=res) res++;
+	}
+	
 	return res;
 }
 
@@ -1102,6 +1125,7 @@ void mouse_handler::attack_enemy_(const map_location& att_loc
 	gui().unhighlight_reach();
 	gui().draw();
 
+	current_team().set_action_bonus_count(1 + current_team().action_bonus_count());
 	///@todo change ToD to be location specific for the defender
 
 	synced_context::run_in_synced_context("attack", replay_helper::get_attack(attacker_loc, defender_loc, att.attack_num, def.attack_num,

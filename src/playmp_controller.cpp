@@ -215,10 +215,20 @@ void playmp_controller::play_human_turn(){
 						undo_stack_->undo();
 					throw end_turn_exception(gui_->playing_side());
 				}
+				else if(res == turn_info::PROCESS_END_LINGER)
+				{
+					if(!linger_)
+						replay::process_error("Received unexpected next_scenario durign the game");
+					else
+					{
+						//we end the turn immidiately to prevent receiving data of the next scenario while we are not playing it.
+						end_turn();
+					}
+				}
 			}
 
 			play_slice();
-			check_end_level();
+			check_victory();
 			// give a chance to the whiteboard to continue an execute_all_actions
 			resources::whiteboard->continue_execute_all();
 		} catch(const end_level_exception&) {
@@ -284,7 +294,7 @@ void playmp_controller::play_idle_loop()
 			}
 
 			play_slice();
-			check_end_level();
+			check_victory();
 		} catch(const end_level_exception&) {
 			turn_data_->send_data();
 			throw;
@@ -410,6 +420,10 @@ void playmp_controller::wait_for_upload()
 				if (turn_data_->process_network_data_from_reader(skip_replay_) == turn_info::PROCESS_END_LINGER) {
 					break;
 				}
+			}
+			else
+			{
+				throw end_level_exception(QUIT);
 			}
 
 		} catch(const end_level_exception&) {
@@ -613,6 +627,15 @@ bool playmp_controller::can_execute_command(const hotkey::hotkey_command& cmd, i
 	hotkey::HOTKEY_COMMAND command = cmd.id;
 	bool res = true;
 	switch (command){
+		case hotkey::HOTKEY_ENDTURN:
+			if  (linger_)
+			{
+				return is_host_;
+			}
+			else
+			{
+				return playsingle_controller::can_execute_command(cmd, index);
+			}
 		case hotkey::HOTKEY_SPEAK:
 		case hotkey::HOTKEY_SPEAK_ALLY:
 		case hotkey::HOTKEY_SPEAK_ALL:

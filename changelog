@@ -1,5 +1,6 @@
 Version 1.13.0-dev:
  * AI:
+   * New Micro AI: Fast AI
    * Messenger Escort Micro AI: new optional parameters [filter],
      [filter_second] and invert_order=
    * Messenger Escort Micro AI: bug fix for escort units blocking messenger's
@@ -26,6 +27,7 @@ Version 1.13.0-dev:
        on the signpost when the messenger comes back
      * S3: make objectives consistent between before and after trolls appear
      * S6: remove AI controller.  It doesn't work with sides without a leader
+     * Minor balance tweaks to scenarios 7, 8 and 14.
    * The Hammer of Thursagan:
      * Fixed missing objective in 'The Court of Karrag'.
      * Rebalanced scenarios 'Invaders', Mages and Drakes' and 'Fear'.
@@ -33,7 +35,7 @@ Version 1.13.0-dev:
    * Purge "human_ai" controller type. This is a fixup of bugfix #18829 below.
  * Language and i18n:
    * Updated translations: Czech, French, German, Greek, Hungarian, Italian,
-     Scottish Gaelic, Slovak
+     Lithuanian, Scottish Gaelic, Slovak
  * Lua API:
    * Fix bug #21761: wesnoth.synchronize_choice will now give a warning when
      the table returned by the user-specified function is not completely valid,
@@ -46,6 +48,7 @@ Version 1.13.0-dev:
    * Add 'elemental' trait to mudcrawler line
    * Fix sound timings for drake fire animation macros
  * User interface:
+   * Classic Theme which restores the 1.10 UI. 
    * Made orb and minmap colors configurable by the game preferences.
  * WML engine:
    * Added customizable recall costs for unit types and individual units,
@@ -61,10 +64,11 @@ Version 1.13.0-dev:
    * Increased the sound mixer channel allocation from 16 to 32, thereby
      raising the limit for simultaneous sound effects from 5 to 21.
    * Fix bug #21758: "Ready not blocked while player pick faction."
-   * Fix bug #18829: "ai sides show up as "controller=network" on remote clients".
-     This issue is the source of some difficulties with mp campaigns which occur
-     when the campaign is reloaded from a non-host side, or after a player rejoins
-     from observer status. Hopefully, reloading campaigns is easier after this.
+   * Fix bug #18829: "ai sides show up as "controller=network" on remote
+     clients". This issue is the source of some difficulties with mp campaigns
+     which occur when the campaign is reloaded from a non-host side, or after a
+     player rejoins from observer status. Hopefully, reloading campaigns is
+     easier after this.
    * Fix bug #21797: "Mandatory WML child missing" when leaving a reloaded game.
    * Fix bug #21808: Cannot join a reloaded game as an observer.
    * Fixed halos glitching through locations that become shrouded after the
@@ -111,6 +115,27 @@ Version 1.13.0-dev:
    * Fix bug #21931: controllers bugged in (basic campaign) when networked
    * Fix bug #21883: make sure movement animations don't cycle with fog on
    * Fix bug #21316: make subframes within standing animations cycle by default
+   * Fix bug #21967: fix crash when unit modification to traits has empty id
+   * Fix bug #19258, 21962: WML variables spuriously copied to replay_start
+   * Fix implementation bug in random number generator: rand_pool_ is now an
+     unsigned long rather than an unsigned int.
+   * Fix bug #21491: fix drag+drop for unit movements
+   * Fix bug #21448: make premoved units selection like in Wesnoth 1.10
+   * Fix bug #21372: fix unit move continuation if enemy discovered
+   * Added a Python/Tkinter based GUI to allow running wmllint, wmlscope and
+     wmlindent in an easier way
+   * Some commandline output which was helpful for noninteractive ai testing
+     is redirected from std::cout to a logdomain "aitesting".
+   * Added WML unit test capabilities, accessible from commandline using -u
+     switch. These are useful for unit testing the WML / lua api.
+   * Added WML tags [issue_attack_command] and [issue_move_command]. These
+     commands can be used to script a scenario and use the same code path
+     as if a human / ai ordered the command. These are intended to facilitate
+     making some kinds of noninteractive unit tests.
+   * Support for total conversions, so called "cores".  
+   * Fix bug #22030: correct index of weapon special disable in attack GUI
+   * Fix bug #21964: assertion failure when using "controller" attribute with
+     a number.
 
 Version 1.11.11:
  * Add-ons server:
