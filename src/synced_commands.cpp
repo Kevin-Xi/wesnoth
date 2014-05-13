@@ -141,13 +141,17 @@ SYNCED_COMMAND_HANDLER_FUNCTION(recall, child, use_undo, show, error_handler)
 
 SYNCED_COMMAND_HANDLER_FUNCTION(attack, child, /*use_undo*/, show, error_handler)
 {
-
 	const config &destination = child.child("destination");
 	const config &source = child.child("source");
 	//check_checksums(*cfg);
 
-	if (!destination || !source) {
-		error_handler("no destination/source found in attack\n", true);
+	if (!destination) {
+		error_handler("no destination found in attack\n", true);
+		return false;
+	}
+
+	if (!source) {
+		error_handler("no source found in attack \n", true);
 		return false;
 	}
 
@@ -160,7 +164,7 @@ SYNCED_COMMAND_HANDLER_FUNCTION(attack, child, /*use_undo*/, show, error_handler
 	int def_weapon_num = child["defender_weapon"].to_int(-2);
 	if (def_weapon_num == -2) {
 		// Let's not gratuitously destroy backwards compatibility.
-		WRN_REPLAY << "Old data, having to guess weapon\n";
+		LOG_REPLAY << "Old data, having to guess weapon\n";
 		def_weapon_num = -1;
 	}
 
@@ -170,9 +174,11 @@ SYNCED_COMMAND_HANDLER_FUNCTION(attack, child, /*use_undo*/, show, error_handler
 		return false;
 	}
 
-	const std::string &att_type_id = child["attacker_type"];
-	if (u->type_id() != att_type_id) {
-		WRN_REPLAY << "unexpected attacker type: " << att_type_id << "(game_state gives: " << u->type_id() << ")\n";
+	if (child.has_attribute("attacker_type")) {
+		const std::string &att_type_id = child["attacker_type"];
+		if (u->type_id() != att_type_id) {
+			WRN_REPLAY << "unexpected attacker type: " << att_type_id << "(game_state gives: " << u->type_id() << ")\n";
+		}
 	}
 
 	if (size_t(weapon_num) >= u->attacks().size()) {
@@ -189,9 +195,11 @@ SYNCED_COMMAND_HANDLER_FUNCTION(attack, child, /*use_undo*/, show, error_handler
 		return false;
 	}
 
-	const std::string &def_type_id = child["defender_type"];
-	if (tgt->type_id() != def_type_id) {
-		WRN_REPLAY << "unexpected defender type: " << def_type_id << "(game_state gives: " << tgt->type_id() << ")\n";
+	if (child.has_attribute("defender_type")) {
+		const std::string &def_type_id = child["defender_type"];
+		if (tgt->type_id() != def_type_id) {
+			WRN_REPLAY << "unexpected defender type: " << def_type_id << "(game_state gives: " << tgt->type_id() << ")\n";
+		}
 	}
 
 	if (def_weapon_num >= static_cast<int>(tgt->attacks().size())) {
@@ -201,8 +209,6 @@ SYNCED_COMMAND_HANDLER_FUNCTION(attack, child, /*use_undo*/, show, error_handler
 	}
 
 	DBG_REPLAY << "Attacker XP (before attack): " << u->experience() << "\n";
-
-	
 	
 	resources::undo_stack->clear();
 	attack_unit_and_advance(src, dst, weapon_num, def_weapon_num, show);
@@ -321,15 +327,16 @@ SYNCED_COMMAND_HANDLER_FUNCTION(lua_ai, child,  /*use_undo*/, /*show*/, /*error_
 	return true;
 }
 
-SYNCED_COMMAND_HANDLER_FUNCTION(auto_shroud, child,  /*use_undo*/, /*show*/, /*error_handler*/)
+SYNCED_COMMAND_HANDLER_FUNCTION(auto_shroud, child,  use_undo, /*show*/, /*error_handler*/)
 {
+	assert(use_undo);
 	int current_team_num = resources::controller->current_side();
 	team &current_team = (*resources::teams)[current_team_num - 1];
 
 	bool active = child["active"].to_bool();
 	// Turning on automatic shroud causes vision to be updated.
 	if ( active )
-		resources::undo_stack->commit_vision(true);
+		resources::undo_stack->commit_vision();
 
 	current_team.set_auto_shroud_updates(active);
 	return true;
@@ -344,8 +351,9 @@ SYNCED_COMMAND_HANDLER_FUNCTION(auto_shroud, child,  /*use_undo*/, /*show*/, /*e
  * this means it ia synced command liek any other.
  */
 
-SYNCED_COMMAND_HANDLER_FUNCTION(update_shroud, /*child*/,  /*use_undo*/, /*show*/, /*error_handler*/)
+SYNCED_COMMAND_HANDLER_FUNCTION(update_shroud, /*child*/,  use_undo, /*show*/, /*error_handler*/)
 {
-	resources::undo_stack->commit_vision(true);
+	assert(use_undo);
+	resources::undo_stack->commit_vision();
 	return true;
 }
