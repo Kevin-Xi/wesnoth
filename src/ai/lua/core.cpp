@@ -857,8 +857,8 @@ static int cfun_ai_kevin_analyze(lua_State *L)
     std::queue<stage_state> states_;    // How about vector? The efficiency is good and can contains intermediate results.
 
     // Utilizing dynamic programming to find optimal policy
-    // One stage contains two turns, start from AI turn
-    // and end when the following enemy's turn finish.
+    // One stage contains one turns, start from AI 
+    // and end when the following enemy's moves finish.
 
     // First calculate states of both sides.
     boost::shared_ptr<stage_state> stage_1(new stage_state(own_side_, resources::tod_manager->turn(), 1, *resources::units, *resources::game_map, *resources::teams));
@@ -1070,7 +1070,7 @@ stage_state::stage_state(const int own_side_, const int turn_no_, const int stag
 
     
     const int total_stages = 3; // Move into ctor?
-    const int turn_left = (total_stages - stage_no_ + 1) * 2;
+    const int turn_left = total_stages - stage_no_;
     std::vector<int> upkeep_per_turn(total_team, 0);
     std::vector<int> income_per_turn(total_team, 0);
     std::vector<double> gold(total_team, 0.0);
