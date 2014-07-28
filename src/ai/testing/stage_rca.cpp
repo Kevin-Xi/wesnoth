@@ -28,6 +28,7 @@
 
 #include <boost/bind.hpp>
 #include <boost/foreach.hpp>
+#include <string>
 
 namespace ai {
 
@@ -87,8 +88,32 @@ bool candidate_action_evaluation_loop::do_play_stage()
 {
 	LOG_AI_TESTING_RCA_DEFAULT << "Starting candidate action evaluation loop for side "<< get_side() << std::endl;
 
-	BOOST_FOREACH(candidate_action_ptr ca, candidate_actions_){
-		ca->enable();
+	if (has_strategy()) {
+		if (is_offense()) {
+			BOOST_FOREACH(candidate_action_ptr ca, candidate_actions_){
+				if (ca->get_name() == "ai_default_rca::retreat_phase") {
+					DBG_AI_TESTING_RCA_DEFAULT << "disbale " << ca->get_name() <<std::endl;
+					ca->disable();
+				} else {
+					DBG_AI_TESTING_RCA_DEFAULT << "enable " << ca->get_name() <<std::endl;
+					ca->enable();
+				}
+			}
+		} else if (is_defense()) {
+			BOOST_FOREACH(candidate_action_ptr ca, candidate_actions_){
+				if (ca->get_name() == "ai_default_rca::combat_phase" || ca->get_name() == "ai_default_rca::get_villages_phase") {
+					DBG_AI_TESTING_RCA_DEFAULT << "disbale " << ca->get_name() <<std::endl;
+					ca->disable();
+				} else {
+					DBG_AI_TESTING_RCA_DEFAULT << "enable " << ca->get_name() <<std::endl;
+					ca->enable();
+				}
+			}
+		}
+	} else {
+		BOOST_FOREACH(candidate_action_ptr ca, candidate_actions_){
+			ca->enable();
+		}
 	}
 
 	//sort candidate actions by max_score DESC
