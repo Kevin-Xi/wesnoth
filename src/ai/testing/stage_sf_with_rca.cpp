@@ -28,7 +28,9 @@
 #include "../../actions/attack.hpp"
 #include "../../actions/heal.hpp"
 #include "../../config.hpp"
+#include "../../game_board.hpp"
 #include "../../log.hpp"
+#include "../../map.hpp"
 #include "../../resources.hpp"
 #include "../../tod_manager.hpp"
 #include "../../team.hpp"
@@ -318,23 +320,34 @@ void turn_state::scoring_state(){
 	DBG_AI_TESTING_SF_WITH_RCA << "\t\t------turn_state::scoring_state() begin------" << std::endl;
 	// A very simple scoring function.
 
+	state_score_ = 0.0;
+
+	const gamemap &map = resources::gameboard->map();
+
 	const int total_team = teams_.size();
 	std::vector<double> state(total_team, 0.0);
 	std::vector<int> total_level(total_team, 0);
 
-	// Sum up the units' score.
+	// Sum up the units' score, with simple HP, EXP and terrain weight.
+	// TODO: doc this
+	// TODO: frontline unit is expensive, in bad terrian is expensive
 	for(unit_map::const_unit_iterator ui = units_.begin(); ui != units_.end(); ++ui) {
 		int current_side = ui->side() - 1;
 
-		double unit_score = (double)ui->hitpoints()/(double)ui->max_hitpoints()*(double)ui->cost();
+		double c = static_cast<double>(ui->cost());
+		double h = static_cast<double>(ui->hitpoints());
+		double mh = static_cast<double>(ui->max_hitpoints());
+		double e = static_cast<double>(ui->experience());
+		double me = static_cast<double>(ui->max_experience());
+		double def = static_cast<double>(ui->defense_modifier(map.get_terrain(ui->get_location()))/100.0);
+		double unit_score = c * (h*h)/(mh*mh) * (1+(e*e)/(me*me)) * def;
 		LOG_AI_TESTING_SF_WITH_RCA << "\t\t\tside " << current_side+1 << " unit " << ui->type_name() << "'s score is " << unit_score << std::endl;
 		state[current_side] += unit_score;
-		total_level[current_side] += ui->level();
+		total_level[current_side] += ui->level();//TODO:leader and loyal???
 	}
 
 
-	const int total_turns = 3;
-	const int turn_left = total_turns - turn_no_;
+	const int total_turns = 3; // Calculate 3 turns ahead.
 	std::vector<int> upkeep_per_turn(total_team, 0);
 	std::vector<int> income_per_turn(total_team, 0);
 	std::vector<double> gold(total_team, 0.0);
@@ -347,8 +360,11 @@ void turn_state::scoring_state(){
 		upkeep_per_turn[current_side] = total_level[current_side]>ti->support() ? total_level[current_side]-ti->support() : 0;
 		income_per_turn[current_side] = ti->total_income() - upkeep_per_turn[current_side];
 
-		// The further, the rougher. So drop 0.4 weight for each turn.
-		gold[current_side] = ti->gold() + income_per_turn[current_side] * (1+(1-0.4*(double)(turn_left-1)))*turn_left/2;
+		// The further, the rougher. So drop 0.3 weight for each turn.
+		double cg = static_cast<double>(ti->gold());
+		double i = static_cast<double>(income_per_turn[current_side]);
+		double weight = (1.0+(1.0-0.3*(total_turns-1.0)))*total_turns/2.0;
+		gold[current_side] = cg + i * weight;
 		state[current_side] += gold[current_side];
 
 		LOG_AI_TESTING_SF_WITH_RCA << "\t\t\tside " << current_side+1 << " will totally get " << gold[current_side] << " gold." << std::endl;
