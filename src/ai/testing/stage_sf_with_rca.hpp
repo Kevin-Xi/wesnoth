@@ -26,6 +26,7 @@
 #include "../../unit_map.hpp"
 
 #include <queue>
+#include <vector>
 
 #ifdef _MSC_VER
 #pragma warning(push)
@@ -67,7 +68,9 @@ public:
 private:
 	std::queue<turn_state> states_;
 
-	boost::shared_ptr<candidate_action_evaluation_loop> rca_;
+	std::vector<boost::shared_ptr<candidate_action_evaluation_loop> > rcas_;
+
+	ai_context &context_;
 
 	const config &cfg_;
 };

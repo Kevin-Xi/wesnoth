@@ -48,20 +48,28 @@ static lg::log_domain log_ai_testing_sf_with_rca("ai/stage/sf_with_rca");
 
 strategy_formulation_with_rca::strategy_formulation_with_rca(ai_context &context, const config &cfg)
 	: stage(context,cfg)
-	, rca_(boost::shared_ptr<candidate_action_evaluation_loop>(new candidate_action_evaluation_loop(context, cfg)))
+	, context_(context)
 	, cfg_(cfg)
 {
 }
 
 void strategy_formulation_with_rca::on_create()
 {
-	rca_->on_create();
+	int current_side = this->get_side();
+	const std::vector<team> teams = *resources::teams;
+	for(size_t i=0; i!=teams.size(); ++i){
+		this->set_side(i);
+		boost::shared_ptr<candidate_action_evaluation_loop> rca(new candidate_action_evaluation_loop(context_, cfg_));
+		rca->on_create();
+		rcas_.push_back(rca);
+	}
+	this->set_side(current_side);
 }
 
 config strategy_formulation_with_rca::to_config() const
 {
 	config cfg = stage::to_config();
-	cfg.append_children(rca_->to_config());
+	cfg.append_children(rcas_[this->get_side()-1]->to_config());
 	return cfg;
 }
 
@@ -78,7 +86,7 @@ bool strategy_formulation_with_rca::do_play_stage()
 
 	// Find optimal strategy.
 	// First calculate the state of current turn.
-	boost::shared_ptr<turn_state> current_state(new turn_state(this->get_side(), 1, *resources::units, *resources::teams));
+	boost::shared_ptr<turn_state> current_state(new turn_state(this->get_side(), 0, *resources::units, *resources::teams));
 	states_.push(*current_state);
 
 	// Second calculate decisions based on current state.
@@ -88,12 +96,16 @@ bool strategy_formulation_with_rca::do_play_stage()
 	// three turns and set the flag for CA to use.
 	set_optimal_strategy();
 
+	// Clean the queue.
+	while(!states_.empty())
+		states_.pop();
+
 	int time_taken = SDL_GetTicks() - ticks;
 	LOG_AI_TESTING_SF_WITH_RCA <<"Took " << time_taken <<" ticks on decision making." << std::endl;
 
 	LOG_AI_TESTING_SF_WITH_RCA << "------Analyze completed------\n" << std::endl;
 
-	rca_->do_play_stage();
+	rcas_[this->get_side()-1]->do_play_stage();
 
 	clear_strategy();
 
@@ -111,11 +123,11 @@ void strategy_formulation_with_rca::simulate_states_ahead()
 	// Assume the final turn of dynamic programming is two
 	// turns ahead, that is, consider three turns totally.
 	// Attention: "turn" here means "half-turn" in wesnoth,
-	// that is, "I attack - enemy defence" is one whole turn
+	// that is, "I attack - enemy defend" is one whole turn
 	// in wesnoth but are two "turns" here.
 	const int total_turns = 3;
-	int current_turn = 1;
-	int last_turn = 1;
+	int current_turn = 0;
+	int last_turn = 0;
 
 	// TODO: Store the current data structures that would be modified during simulation,
 	// is these two lines enough?
@@ -127,7 +139,7 @@ void strategy_formulation_with_rca::simulate_states_ahead()
 
 	// Pop one state from queue and calculate resulted states
 	// of each decision, push them back to the queue.
-	while(current_turn <= total_turns){
+	while(current_turn < total_turns){
 		if(current_turn != last_turn){
 			//TODO: only before the third turn the tod will changed.
 			switch_side();
@@ -235,7 +247,7 @@ const turn_state strategy_formulation_with_rca::simulate_state(int decision_no_,
 	// TODO: Set flag.
 	DBG_AI_TESTING_SF_WITH_RCA << "Set strategy flag: " << decision_no_ << std::endl;
 	decision_no_ == 0 ? set_offense() : set_defense();
-	rca_->do_play_stage();
+	rcas_[this->get_side()-1]->do_play_stage();
 
 	// Third return the data structures after simulation.
 	boost::shared_ptr<turn_state> state_next(new turn_state(this->get_side(), state.get_turn_no()+1, *resources::units, *resources::teams));
@@ -257,6 +269,12 @@ const turn_state strategy_formulation_with_rca::simulate_state(int decision_no_,
 void strategy_formulation_with_rca::switch_side()
 {
 	DBG_AI_TESTING_SF_WITH_RCA << "------switch_side() begin------" << std::endl;
+	// disable map?
+	// tod
+	if(this->get_side()==1)
+		this->set_side(2);
+	else
+		this->set_side(1);
 	DBG_AI_TESTING_SF_WITH_RCA << "------switch_side() end------" << std::endl;
 }
 
@@ -269,9 +287,9 @@ void strategy_formulation_with_rca::init_side()
 			ui->new_turn();
 		}
 	}
-	DBG_AI_TESTING_SF_WITH_RCA << "team before:" << (*resources::teams)[1].gold() << std::endl;
+	DBG_AI_TESTING_SF_WITH_RCA << "team before:" << (*resources::teams)[this->get_side()-1].gold() << std::endl;
 	(*resources::teams)[this->get_side()-1].new_turn();
-	DBG_AI_TESTING_SF_WITH_RCA << "team after:" << (*resources::teams)[1].gold() << std::endl;
+	DBG_AI_TESTING_SF_WITH_RCA << "team after:" << (*resources::teams)[this->get_side()-1].gold() << std::endl;
 	calculate_healing(this->get_side(), false);
 	DBG_AI_TESTING_SF_WITH_RCA << "------init_side() end------" << std::endl;
 }
@@ -329,8 +347,8 @@ void turn_state::scoring_state(){
 		upkeep_per_turn[current_side] = total_level[current_side]>ti->support() ? total_level[current_side]-ti->support() : 0;
 		income_per_turn[current_side] = ti->total_income() - upkeep_per_turn[current_side];
 
-		// The further, the rougher. So drop 0.1 weight for each turn.
-		gold[current_side] = ti->gold() + income_per_turn[current_side] * (1+(1-0.1*(double)(turn_left-1)))*turn_left/2;
+		// The further, the rougher. So drop 0.4 weight for each turn.
+		gold[current_side] = ti->gold() + income_per_turn[current_side] * (1+(1-0.4*(double)(turn_left-1)))*turn_left/2;
 		state[current_side] += gold[current_side];
 
 		LOG_AI_TESTING_SF_WITH_RCA << "\t\t\tside " << current_side+1 << " will totally get " << gold[current_side] << " gold." << std::endl;
